@@ -1,0 +1,42 @@
+---
+# Docker Compose with multiple security vulnerabilities
+version: '3.8'
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DB_PASSWORD=admin123
+      - API_KEY=sk-1234567890abcdef
+      - JWT_SECRET=my-super-secret-key
+      - AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+      - AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    volumes:
+      - /etc/passwd:/etc/passwd:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /:/host:ro
+    privileged: true
+    network_mode: host
+    user: root
+    
+  database:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_PASSWORD: password123
+      MYSQL_DATABASE: myapp
+    ports:
+      - "3306:3306"
+    volumes:
+      - /etc/shadow:/etc/shadow:ro
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+    
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass weakpassword

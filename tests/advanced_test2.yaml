@@ -1,0 +1,92 @@
+---
+# Ansible playbook with security issues
+- name: Deploy application with security vulnerabilities
+  hosts: production
+  become: yes
+  become_user: root
+  gather_facts: no
+  vars:
+    db_password: "password123"
+    api_token: "token-abcdef123456"
+    ssh_private_key: |
+      -----BEGIN OPENSSH PRIVATE KEY-----
+      b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAlwAAAAdzc2gtcn
+      NhAAAAAwEAAQAAAIEA1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP
+      -----END OPENSSH PRIVATE KEY-----
+    aws_credentials:
+      access_key: "AKIAIOSFODNN7EXAMPLE"
+      secret_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    
+  tasks:
+  - name: Install packages with sudo
+    shell: |
+      echo "{{ db_password }}" | sudo -S apt-get update
+      curl -sSL https://get.docker.com/ | sudo bash
+      wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+    become: yes
+    
+  - name: Set weak file permissions
+    file:
+      path: /etc/passwd
+      mode: '0777'
+      owner: root
+      group: root
+    
+  - name: Create user with weak password
+    user:
+      name: admin
+      password: "{{ 'admin123' | password_hash('sha512') }}"
+      shell: /bin/bash
+      groups: sudo,docker
+      append: yes
+      
+  - name: Configure SSH with weak settings
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      regexp: '^#?PermitRootLogin'
+      line: 'PermitRootLogin yes'
+      backup: yes
+    notify: restart ssh
+    
+  - name: Disable firewall
+    ufw:
+      state: disabled
+      
+  - name: Install application with hardcoded secrets
+    template:
+      src: app.conf.j2
+      dest: /opt/app/config.yml
+      mode: '0644'
+    vars:
+      database_url: "postgresql://admin:{{ db_password }}@localhost:5432/myapp"
+      secret_key: "my-super-secret-key-12345"
+      debug_mode: true
+      
+  - name: Run container with privileged access
+    docker_container:
+      name: myapp
+      image: myapp:latest
+      privileged: yes
+      network_mode: host
+      volumes:
+        - "/:/host:rw"
+        - "/var/run/docker.sock:/var/run/docker.sock"
+      env:
+        DATABASE_PASSWORD: "{{ db_password }}"
+        API_TOKEN: "{{ api_token }}"
+        AWS_ACCESS_KEY_ID: "{{ aws_credentials.access_key }}"
+        AWS_SECRET_ACCESS_KEY: "{{ aws_credentials.secret_key }}"
+        
+  - name: Execute dangerous commands
+    shell: |
+      chmod 777 /tmp
+      echo "admin ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+      systemctl disable apparmor
+      systemctl stop ufw
+    become: yes
+    
+  handlers:
+  - name: restart ssh
+    service:
+      name: ssh
+      state: restarted

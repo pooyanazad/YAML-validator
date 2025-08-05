@@ -1,0 +1,62 @@
+---
+# Kubernetes deployment with security issues
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vulnerable-app
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vulnerable-app
+  template:
+    metadata:
+      labels:
+        app: vulnerable-app
+    spec:
+      hostNetwork: true
+      hostPID: true
+      hostIPC: true
+      containers:
+      - name: app
+        image: myapp:latest
+        securityContext:
+          runAsUser: 0
+          allowPrivilegeEscalation: true
+          privileged: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            add:
+              - SYS_ADMIN
+              - NET_ADMIN
+              - SYS_PTRACE
+        env:
+        - name: DATABASE_PASSWORD
+          value: "admin123"
+        - name: SECRET_TOKEN
+          value: "token-12345"
+        - name: ENCRYPTION_KEY
+          value: "my-encryption-key-123"
+        ports:
+        - containerPort: 8080
+          hostPort: 8080
+        volumeMounts:
+        - name: host-root
+          mountPath: /host
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+      volumes:
+      - name: host-root
+        hostPath:
+          path: /
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock
+      - name: proc
+        hostPath:
+          path: /proc
+      serviceAccountName: default
