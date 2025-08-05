@@ -1,0 +1,45 @@
+# Test YAML file with multiple issues
+# This file contains syntax errors, linting issues, and security problems
+
+version: "3.8"
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    environment:
+      - DB_PASSWORD=admin123  # Security issue: hardcoded password
+      - API_KEY=sk-1234567890abcdef  # Security issue: hardcoded API key
+    volumes:
+      - /etc/passwd:/etc/passwd:ro  # Security issue: mounting sensitive file
+    privileged: true  # Security issue: privileged container
+    
+  database:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: root  # Security issue: weak password
+      MYSQL_DATABASE: myapp
+    ports:
+      - "3306:3306"  # Security issue: exposing database port
+    
+# Syntax error: invalid indentation below
+invalid_section:
+  key1: value1
+ key2: value2  # Wrong indentation
+    key3: value3
+
+# Linting issues
+very_long_line_that_exceeds_the_recommended_line_length_limit_and_should_trigger_yamllint_warnings_about_line_length: "this is a very long value"
+
+# Missing quotes around string that looks like a number
+version_number: 1.0
+
+# Trailing spaces and tabs
+trailing_spaces: "value"    
+trailing_tabs: "value"	
+
+# Inconsistent indentation
+config:
+  option1: value1
+   option2: value2  # Wrong indentation
+  option3: value3

@@ -1,0 +1,44 @@
+---
+# GitHub Actions workflow with security issues
+name: Vulnerable CI/CD Pipeline
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Setup with hardcoded secrets
+      env:
+        DATABASE_URL: postgresql://admin:password123@localhost:5432/mydb
+        API_TOKEN: ghp_1234567890abcdefghijklmnopqrstuvwxyz
+        PRIVATE_KEY: |
+          -----BEGIN RSA PRIVATE KEY-----
+          MIIEpAIBAAKCAQEA1234567890abcdef...
+          -----END RSA PRIVATE KEY-----
+        AWS_ACCESS_KEY: AKIAIOSFODNN7EXAMPLE
+        AWS_SECRET_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+      run: |
+        echo "Building application..."
+        echo $DATABASE_URL
+        
+    - name: Unsafe script execution
+      run: |
+        curl -sSL https://get.docker.com/ | sh
+        wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+        
+    - name: Docker build with issues
+      run: |
+        docker build --no-cache .
+        docker run --privileged --pid=host --net=host -v /:/host myapp
+        
+    - name: Deploy with sudo
+      run: |
+        sudo chmod 777 /etc/passwd
+        sudo usermod -aG docker $USER
+        echo "admin123" | sudo -S systemctl restart nginx

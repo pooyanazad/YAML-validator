@@ -1,0 +1,86 @@
+---
+# Clean YAML configuration file
+# This file follows best practices and should pass all validations
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: production
+  labels:
+    app: myapp
+    version: "1.0.0"
+data:
+  app_name: "MyApplication"
+  environment: "production"
+  log_level: "INFO"
+  port: "8080"
+  timeout: "30"
+  max_connections: "100"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp-service
+  namespace: production
+  labels:
+    app: myapp
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: myapp
+
+---
+# Application configuration
+app_config:
+  database:
+    pool_size: 10
+    timeout: 5000
+    retry_attempts: 3
+  cache:
+    ttl: 3600
+    max_size: 1000
+  logging:
+    level: "INFO"
+    format: "json"
+    output: "stdout"
+  security:
+    cors_enabled: true
+    rate_limiting:
+      enabled: true
+      requests_per_minute: 100
+  features:
+    new_ui: true
+    analytics: true
+    monitoring: true
+
+# Server configuration
+server:
+  host: "0.0.0.0"
+  port: 8080
+  workers: 4
+  max_request_size: "10MB"
+
+# Monitoring configuration
+monitoring:
+  metrics_enabled: true
+  health_check_path: "/health"
+  metrics_path: "/metrics"
+
+# Clean list formatting
+allowed_origins:
+  - "https://example.com"
+  - "https://app.example.com"
+  - "https://admin.example.com"
+
+# Proper boolean values
+feature_flags:
+  enable_caching: true
+  debug_mode: false
+  maintenance_mode: false

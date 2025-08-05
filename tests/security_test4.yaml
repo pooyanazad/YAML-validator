@@ -1,0 +1,72 @@
+---
+# Terraform configuration with security issues (YAML format)
+terraform:
+  required_version: ">= 0.12"
+  
+provider:
+  aws:
+    region: us-west-2
+    access_key: AKIAIOSFODNN7EXAMPLE
+    secret_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+resource:
+  aws_instance:
+    web_server:
+      ami: ami-0c55b159cbfafe1d0
+      instance_type: t2.micro
+      key_name: my-key-pair
+      vpc_security_group_ids:
+        - ${aws_security_group.web_sg.id}
+      user_data: |
+        #!/bin/bash
+        echo "root:password123" | chpasswd
+        echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+        systemctl restart sshd
+        
+  aws_security_group:
+    web_sg:
+      name: web-security-group
+      description: Security group for web server
+      ingress:
+        - from_port: 22
+          to_port: 22
+          protocol: tcp
+          cidr_blocks:
+            - 0.0.0.0/0
+        - from_port: 80
+          to_port: 80
+          protocol: tcp
+          cidr_blocks:
+            - 0.0.0.0/0
+        - from_port: 443
+          to_port: 443
+          protocol: tcp
+          cidr_blocks:
+            - 0.0.0.0/0
+        - from_port: 3389
+          to_port: 3389
+          protocol: tcp
+          cidr_blocks:
+            - 0.0.0.0/0
+      egress:
+        - from_port: 0
+          to_port: 0
+          protocol: "-1"
+          cidr_blocks:
+            - 0.0.0.0/0
+            
+  aws_s3_bucket:
+    data_bucket:
+      bucket: my-public-data-bucket
+      acl: public-read-write
+      versioning:
+        enabled: false
+      server_side_encryption_configuration:
+        rule:
+          apply_server_side_encryption_by_default:
+            sse_algorithm: AES256
+      public_access_block:
+        block_public_acls: false
+        block_public_policy: false
+        ignore_public_acls: false
+        restrict_public_buckets: false

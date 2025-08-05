@@ -1,0 +1,132 @@
+---
+# Helm values.yaml with security vulnerabilities
+global:
+  environment: production
+  debug: true
+  logLevel: DEBUG
+  
+image:
+  repository: myapp
+  tag: latest
+  pullPolicy: Always
+  
+secrets:
+  database:
+    host: "prod-db.company.com"
+    username: "admin"
+    password: "SuperSecretPassword123!"
+    port: 5432
+    ssl: false
+  
+  redis:
+    host: "redis.company.com"
+    password: "redis-password-123"
+    port: 6379
+    
+  api:
+    jwt_secret: "jwt-secret-key-production-2024"
+    encryption_key: "32-char-encryption-key-123456789"
+    admin_token: "admin-token-abcdef123456789"
+    
+  external:
+    stripe_secret_key: "sk_test_fake_stripe_key_for_testing_only"
+    sendgrid_api_key: "SG.fake_sendgrid_key.for_testing_purposes"
+    slack_webhook_url: "https://hooks.slack.com/services/FAKE/WEBHOOK/URL"
+    github_personal_access_token: "ghp_fake_github_token_for_testing"
+    
+  aws:
+    access_key_id: "AKIAIOSFODNN7EXAMPLE"
+    secret_access_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    region: "us-east-1"
+    
+  certificates:
+    tls_private_key: |
+      -----BEGIN PRIVATE KEY-----
+      MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKB
+      UjnP9wYvp4f6VaMjhyDdHzTTNiLArPiHflqO63/OhSr7QlLjXHBOoI/WDiM6DwYF
+      -----END PRIVATE KEY-----
+    tls_certificate: |
+      -----BEGIN CERTIFICATE-----
+      MIIDXTCCAkWgAwIBAgIJAKoK/OvD8WYOMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV
+      BAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX
+      -----END CERTIFICATE-----
+      
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 8080
+  
+securityContext:
+  runAsUser: 0
+  runAsGroup: 0
+  fsGroup: 0
+  privileged: true
+  allowPrivilegeEscalation: true
+  readOnlyRootFilesystem: false
+  capabilities:
+    add:
+      - SYS_ADMIN
+      - NET_ADMIN
+      - SYS_PTRACE
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+      
+networkPolicy:
+  enabled: false
+  
+podSecurityPolicy:
+  enabled: false
+  
+rbac:
+  create: true
+  rules:
+    - apiGroups: ["*"]
+      resources: ["*"]
+      verbs: ["*"]
+      
+volumes:
+  hostPaths:
+    - name: host-root
+      hostPath: /
+      mountPath: /host
+    - name: docker-socket
+      hostPath: /var/run/docker.sock
+      mountPath: /var/run/docker.sock
+    - name: proc
+      hostPath: /proc
+      mountPath: /host/proc
+      
+resources:
+  limits:
+    cpu: "2"
+    memory: "4Gi"
+  requests:
+    cpu: "1"
+    memory: "2Gi"
+    
+livenessProbe:
+  enabled: false
+  
+readinessProbe:
+  enabled: false
+  
+env:
+  - name: DATABASE_URL
+    value: "postgresql://admin:SuperSecretPassword123!@prod-db.company.com:5432/myapp"
+  - name: REDIS_URL
+    value: "redis://:redis-password-123@redis.company.com:6379/0"
+  - name: DEBUG
+    value: "true"
+  - name: LOG_LEVEL
+    value: "DEBUG"
+  - name: DISABLE_SSL_VERIFICATION
+    value: "true"
+    
+ingress:
+  enabled: true
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+  tls:
+    enabled: false

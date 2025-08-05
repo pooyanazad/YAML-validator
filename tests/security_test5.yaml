@@ -1,0 +1,67 @@
+---
+# Application configuration with security vulnerabilities
+app:
+  name: MySecureApp
+  version: 1.0.0
+  debug: true
+  
+database:
+  host: localhost
+  port: 5432
+  username: admin
+  password: admin123
+  ssl_mode: disable
+  connection_string: postgresql://admin:admin123@localhost:5432/myapp?sslmode=disable
+  
+redis:
+  host: localhost
+  port: 6379
+  password: ""
+  ssl: false
+  
+api:
+  secret_key: my-super-secret-key-12345
+  jwt_secret: jwt-secret-key
+  encryption_key: AES256-encryption-key
+  admin_token: admin-token-123456
+  
+aws:
+  access_key_id: AKIAIOSFODNN7EXAMPLE
+  secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+  region: us-east-1
+  s3_bucket: my-public-bucket
+  
+smtp:
+  host: smtp.gmail.com
+  port: 587
+  username: myapp@gmail.com
+  password: myemailpassword123
+  tls: false
+  
+logging:
+  level: DEBUG
+  log_passwords: true
+  log_tokens: true
+  file: /var/log/app.log
+  
+security:
+  cors:
+    allow_origins: ["*"]
+    allow_credentials: true
+    allow_methods: ["*"]
+    allow_headers: ["*"]
+  csrf_protection: false
+  rate_limiting: false
+  input_validation: false
+  
+ssl:
+  enabled: false
+  verify_certificates: false
+  private_key: |
+    -----BEGIN PRIVATE KEY-----
+    MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7...
+    -----END PRIVATE KEY-----
+  certificate: |
+    -----BEGIN CERTIFICATE-----
+    MIIDXTCCAkWgAwIBAgIJAKoK/OvD8WYOMA0GCSqGSIb3DQEBCwUA...
+    -----END CERTIFICATE-----
