@@ -25,6 +25,11 @@ A comprehensive YAML validation tool that performs syntax checking, linting, and
 
 ## Usage
 
+### Linux/macOS
+```bash
+docker run -v "$(pwd):/data" pooyanazad/yaml-checker <yaml-file>
+```
+
 ### Git Bash on Windows
 ```bash
 MSYS_NO_PATHCONV=1 docker run -v "$(pwd):/data" pooyanazad/yaml-checker <yaml-file>
@@ -33,11 +38,6 @@ MSYS_NO_PATHCONV=1 docker run -v "$(pwd):/data" pooyanazad/yaml-checker <yaml-fi
 ### PowerShell/CMD on Windows
 ```bash
 docker run -v "%cd%:/data" pooyanazad/yaml-checker <yaml-file>
-```
-
-### Linux/macOS
-```bash
-docker run -v "$(pwd):/data" pooyanazad/yaml-checker <yaml-file>
 ```
 
 ## Examples
