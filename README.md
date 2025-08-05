@@ -77,3 +77,8 @@ The validator provides detailed reports including:
 ✅ **Detailed reporting** with severity levels  
 ✅ **Industry-standard tools** (yamllint, checkov)  
 ✅ **Zero configuration** required
+
+## Monthly Automated Releases
+
+- Scheduled : Every 1st of the month at 00:00 UTC with auto-incrementing versions ( v1.0.3-YYYYMMDD , v1.0.4-YYYYMMDD , etc.)
+- Includes : Fresh Docker builds, comprehensive testing, Docker Hub deployment, and GitHub releases with usage examples
