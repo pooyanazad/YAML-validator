@@ -10,6 +10,10 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+  contents: write
+  packages: write
+
 env:
   REGISTRY: docker.io
   IMAGE_NAME: pooyanazad/yaml-checker
@@ -30,10 +34,25 @@ jobs:
       run: |
         # Get current date for version
         DATE=$(date +%Y%m%d)
-        # Get run number for uniqueness
-        VERSION="v1.0.2-${DATE}"
+        
+        # Get the latest tag that matches our pattern
+        LATEST_TAG=$(git tag -l "v1.0.*-*" | sort -V | tail -n 1)
+        
+        if [ -z "$LATEST_TAG" ]; then
+          # No previous tags, start with v1.0.2
+          PATCH_VERSION=2
+        else
+          # Extract patch version from latest tag (e.g., v1.0.3-20250805 -> 3)
+          PATCH_VERSION=$(echo $LATEST_TAG | sed 's/v1\.0\.\([0-9]*\)-.*/\1/')
+          # Increment patch version
+          PATCH_VERSION=$((PATCH_VERSION + 1))
+        fi
+        
+        VERSION="v1.0.${PATCH_VERSION}-${DATE}"
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
         echo "Generated version: ${VERSION}"
+        echo "Previous latest tag: ${LATEST_TAG}"
+        echo "New patch version: ${PATCH_VERSION}"
         
     - name: Build Docker image
       uses: docker/build-push-action@v5
