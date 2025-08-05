@@ -1,0 +1,136 @@
+name: Docker Build and Push
+
+on:
+  # Run monthly on the 1st at 2 AM UTC
+  schedule:
+    - cron: '0 2 1 * *'
+  # Allow manual trigger
+  workflow_dispatch:
+  # Run on push to main for testing
+  push:
+    branches: [ main ]
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: pooyanazad/yaml-checker
+
+jobs:
+  build-test-push:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Generate version number
+      id: version
+      run: |
+        # Get current date for version
+        DATE=$(date +%Y%m%d)
+        # Get run number for uniqueness
+        VERSION="v${DATE}.${GITHUB_RUN_NUMBER}"
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "Generated version: ${VERSION}"
+        
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        load: true
+        tags: |
+          ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          ${{ env.IMAGE_NAME }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: Test Docker image with clean YAML
+      run: |
+        echo "Testing with clean YAML file..."
+        docker run --rm -v "${{ github.workspace }}:/data" \
+          ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
+          /data/tests/test3_clean.yaml
+          
+    - name: Test Docker image with problematic YAML
+      run: |
+        echo "Testing with problematic YAML file (should show issues)..."
+        docker run --rm -v "${{ github.workspace }}:/data" \
+          ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
+          /data/tests/test1_issues.yaml || true
+          
+    - name: Test Docker image with security test
+      run: |
+        echo "Testing with security test file..."
+        docker run --rm -v "${{ github.workspace }}:/data" \
+          ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
+          /data/tests/security_test1.yaml || true
+          
+    - name: Login to Docker Hub
+      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        
+    - name: Push Docker image
+      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: |
+          ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          ${{ env.IMAGE_NAME }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: Create GitHub Release
+      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        release_name: Release ${{ steps.version.outputs.version }}
+        body: |
+          ## YAML Validator Release ${{ steps.version.outputs.version }}
+          
+          ### Docker Images
+          - `${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}`
+          - `${{ env.IMAGE_NAME }}:latest`
+          
+          ### Features
+          - YAML syntax validation
+          - Linting with yamllint
+          - Security scanning with Checkov
+          - Cross-platform Docker support
+          
+          ### Usage
+          ```bash
+          # Git Bash on Windows
+          MSYS_NO_PATHCONV=1 docker run -v "${PWD}:/data" ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} /data/your_file.yaml
+          
+          # PowerShell/CMD on Windows
+          docker run -v "${PWD}:/data" ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} /data/your_file.yaml
+          
+          # Linux/macOS
+          docker run -v "$(pwd):/data" ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} /data/your_file.yaml
+          ```
+        draft: false
+        prerelease: false
+        
+    - name: Summary
+      run: |
+        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Image**: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Latest**: ${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tests**: Passed ✅" >> $GITHUB_STEP_SUMMARY
+        if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "- **Status**: Pushed to Docker Hub 🚀" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Status**: Build only (push skipped for non-scheduled runs)" >> $GITHUB_STEP_SUMMARY
+        fi
