@@ -3,8 +3,7 @@ name: Docker Build and Push
 on:
   # Run monthly on the 1st at 2 AM UTC
   schedule:
-    #- cron: '0 2 1 * *'
-    - cron: '0 1 8 * *'
+    - cron: '0 2 1 * *'
   # Allow manual trigger
   workflow_dispatch:
   # Run on push to main for testing
