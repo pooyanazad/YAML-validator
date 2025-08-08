@@ -44,8 +44,17 @@ jobs:
         else
           # Extract patch version from latest tag (e.g., v1.0.3-20250805 -> 3)
           PATCH_VERSION=$(echo $LATEST_TAG | sed 's/v1\.0\.\([0-9]*\)-.*/\1/')
-          # Increment patch version
+          # Extract date from latest tag
+          LATEST_DATE=$(echo $LATEST_TAG | sed 's/v1\.0\.[0-9]*-\(.*\)/\1/')
+          
+          # If running on the same date as latest tag, increment patch version
+          # Otherwise, increment patch version for new date
           PATCH_VERSION=$((PATCH_VERSION + 1))
+          
+          # Check if the generated version already exists and increment if needed
+          while git tag -l "v1.0.${PATCH_VERSION}-${DATE}" | grep -q "v1.0.${PATCH_VERSION}-${DATE}"; do
+            PATCH_VERSION=$((PATCH_VERSION + 1))
+          done
         fi
         
         VERSION="v1.0.${PATCH_VERSION}-${DATE}"
@@ -53,6 +62,7 @@ jobs:
         echo "Generated version: ${VERSION}"
         echo "Previous latest tag: ${LATEST_TAG}"
         echo "New patch version: ${PATCH_VERSION}"
+        echo "Date: ${DATE}"
         
     - name: Build Docker image
       uses: docker/build-push-action@v5
