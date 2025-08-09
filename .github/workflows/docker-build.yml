@@ -48,8 +48,8 @@ jobs:
         LATEST_TAG=$(git tag -l "v1.0.*-*" | sort -V | tail -n 1)
         
         if [ -z "$LATEST_TAG" ]; then
-          # No previous tags, start with v1.0.2
-          PATCH_VERSION=2
+          # No previous tags, start with v1.0.1
+          PATCH_VERSION=1
         else
           # Extract patch version from latest tag (e.g., v1.0.3-20250805 -> 3)
           PATCH_VERSION=$(echo $LATEST_TAG | sed 's/v1\.0\.\([0-9]*\)-.*/\1/')
