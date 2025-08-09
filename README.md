@@ -40,16 +40,6 @@ MSYS_NO_PATHCONV=1 docker run -v "$(pwd):/data" pooyanazad/yaml-checker <yaml-fi
 docker run -v "%cd%:/data" pooyanazad/yaml-checker <yaml-file>
 ```
 
-## Examples
-
-```bash
-# Validate a single YAML file
-MSYS_NO_PATHCONV=1 docker run -v "$(pwd):/data" pooyanazad/yaml-checker config.yaml
-
-# Validate files in subdirectories
-MSYS_NO_PATHCONV=1 docker run -v "$(pwd):/data" pooyanazad/yaml-checker tests/test.yaml
-```
-
 ## Output
 
 The validator provides detailed reports including:
