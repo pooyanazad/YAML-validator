@@ -126,7 +126,6 @@ jobs:
         cache-to: type=gha,mode=max
         
     - name: Create GitHub Release
-      if: github.event_name == 'schedule'
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ steps.version.outputs.version }}
@@ -166,8 +165,5 @@ jobs:
         echo "- **Image**: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Latest**: ${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
         echo "- **Tests**: Passed ✅" >> $GITHUB_STEP_SUMMARY
-        if [[ "${{ github.event_name }}" == "schedule" ]]; then
-          echo "- **Status**: Pushed to Docker Hub 🚀" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "- **Status**: Build only (push skipped for non-scheduled runs)" >> $GITHUB_STEP_SUMMARY
-        fi
+        echo "- **Status**: Pushed to Docker Hub 🚀" >> $GITHUB_STEP_SUMMARY
+        echo "- **Release**: Created on GitHub 📦" >> $GITHUB_STEP_SUMMARY
