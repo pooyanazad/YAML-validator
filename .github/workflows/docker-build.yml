@@ -25,6 +25,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
       
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -32,6 +34,9 @@ jobs:
     - name: Generate version number
       id: version
       run: |
+        # Fetch all tags from remote
+        git fetch --tags
+        
         # Get current date for version
         DATE=$(date +%Y%m%d)
         
