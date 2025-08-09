@@ -51,8 +51,7 @@ The validator provides detailed reports including:
 ## Docker Image
 
 - **Repository**: `pooyanazad/yaml-checker`
-- **Latest Version**: `v1.0.1`
-- **Tags**: `latest`, `v1.0.1`
+- **Valid tag**: Latest is updated always
 
 ## Requirements
 

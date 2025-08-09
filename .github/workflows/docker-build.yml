@@ -168,3 +168,54 @@ jobs:
         echo "- **Tests**: Passed ✅" >> $GITHUB_STEP_SUMMARY
         echo "- **Status**: Pushed to Docker Hub 🚀" >> $GITHUB_STEP_SUMMARY
         echo "- **Release**: Created on GitHub 📦" >> $GITHUB_STEP_SUMMARY
+        
+    - name: Send Success Email
+      if: github.event_name == 'schedule' && success()
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.gmail.com
+        server_port: 587
+        username: ${{ secrets.EMAIL_USERNAME }}
+        password: ${{ secrets.EMAIL_PASSWORD }}
+        subject: "✅ YAML Validator Release ${{ steps.version.outputs.version }} - SUCCESS"
+        to: pooyan.azadparvar@gmail.com
+        from: GitHub Actions
+        body: |
+          🎉 **Scheduled Release Successful!**
+          
+          **Version**: ${{ steps.version.outputs.version }}
+          **Repository**: ${{ github.repository }}
+          **Docker Image**: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          **Workflow**: ${{ github.workflow }}
+          **Run ID**: ${{ github.run_id }}
+          
+          ✅ All tests passed
+          ✅ Docker image pushed to Docker Hub
+          ✅ GitHub release created
+          
+          **View Details**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          
+    - name: Send Failure Email
+      if: github.event_name == 'schedule' && failure()
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.gmail.com
+        server_port: 587
+        username: ${{ secrets.EMAIL_USERNAME }}
+        password: ${{ secrets.EMAIL_PASSWORD }}
+        subject: "❌ YAML Validator Release FAILED - ${{ github.run_id }}"
+        to: pooyan.azadparvar@gmail.com
+        from: GitHub Actions
+        body: |
+          🚨 **Scheduled Release Failed!**
+          
+          **Repository**: ${{ github.repository }}
+          **Workflow**: ${{ github.workflow }}
+          **Run ID**: ${{ github.run_id }}
+          **Failed Step**: Check workflow logs for details
+          
+          ❌ The scheduled release process encountered an error
+          
+          **View Logs**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          
+          Please check the workflow logs to identify and resolve the issue.
