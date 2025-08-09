@@ -4,6 +4,7 @@ on:
   # Run at 11:50 AM Sweden time (09:50 UTC) on weekdays
   schedule:
     - cron: '50 9 * * 1-5'
+    - timezone: 'Europe/Stockholm'
   # Allow manual trigger
   workflow_dispatch:
   # Run on push to main for testing
