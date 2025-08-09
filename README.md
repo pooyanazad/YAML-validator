@@ -30,14 +30,14 @@ A comprehensive YAML validation tool that performs syntax checking, linting, and
 docker run -v "$(pwd):/data" pooyanazad/yaml-checker <yaml-file>
 ```
 
-### Git Bash on Windows
-```bash
-MSYS_NO_PATHCONV=1 docker run -v "$(pwd):/data" pooyanazad/yaml-checker <yaml-file>
-```
-
 ### PowerShell/CMD on Windows
 ```bash
 docker run -v "%cd%:/data" pooyanazad/yaml-checker <yaml-file>
+```
+
+### Git Bash on Windows
+```bash
+MSYS_NO_PATHCONV=1 docker run -v "$(pwd):/data" pooyanazad/yaml-checker <yaml-file>
 ```
 
 ## Output
@@ -51,8 +51,8 @@ The validator provides detailed reports including:
 ## Docker Image
 
 - **Repository**: `pooyanazad/yaml-checker`
-- **Latest Version**: `v1.0.2`
-- **Tags**: `latest`, `v1.0.2`, `v1.0.1`
+- **Latest Version**: `v1.0.1`
+- **Tags**: `latest`, `v1.0.1`
 
 ## Requirements
 
