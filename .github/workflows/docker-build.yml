@@ -2,7 +2,7 @@ name: Docker Build and Push
 
 on:
   schedule:
-    - cron: '20 10 * * *'
+    - cron: '00 00 10 * *'
   # Allow manual trigger
   workflow_dispatch:
   # Run on push to main for testing
@@ -31,7 +31,6 @@ jobs:
       run: |
         echo "Current UTC time: $(date -u)"
         echo "Current local time: $(date)"
-        echo "Timezone info: $(date +%Z %z)"
       
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
