@@ -2,7 +2,7 @@ name: Docker Build and Push
 
 on:
   schedule:
-    - cron: '01 10 * * *'
+    - cron: '20 10 * * *'
   # Allow manual trigger
   workflow_dispatch:
   # Run on push to main for testing
