@@ -1,10 +1,9 @@
 name: Docker Build and Push
 
 on:
-  # Run monthly on the 1st at 2 AM UTC
+  # Run at 11:50 AM Sweden time (09:50 UTC) on weekdays
   schedule:
-    #- cron: '0 2 1 * *'
-    - cron: '0 1 9 * *'
+    - cron: '50 9 * * 1-5'
   # Allow manual trigger
   workflow_dispatch:
   # Run on push to main for testing
