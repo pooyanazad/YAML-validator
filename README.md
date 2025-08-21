@@ -23,6 +23,9 @@ A comprehensive YAML validation tool that performs syntax checking, linting, and
 - Compliance violations
 - Potential security vulnerabilities
 
+## How it look like 
+<img width="881" height="571" alt="image" src="https://github.com/user-attachments/assets/0a3278f9-9f86-431c-90f7-e3d122f0043b" />
+
 ## Usage
 
 ### Linux/macOS
