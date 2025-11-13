@@ -43,9 +43,13 @@ docker run -v "%cd%:/data" pooyanazad/yaml-checker <yaml-file>
 MSYS_NO_PATHCONV=1 docker run -v "$(pwd):/data" pooyanazad/yaml-checker <yaml-file>
 ```
 ### My personal usage
-I define below command on .bashr
+I define below command on .bashr as an alias
 ```
 alias ytest='docker run -v "$(pwd):/data" pooyanazad/yaml-checker'
+```
+I can use this anywhere simply
+```
+ytest ping.yaml
 ```
 
 ## Output
