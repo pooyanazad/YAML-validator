@@ -1,5 +1,5 @@
 # Use Python slim image for smaller size
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # Set working directory
 WORKDIR /app
@@ -11,8 +11,8 @@ RUN mkdir -p /data
 COPY requirements.txt .
 
 # Upgrade pip and install dependencies
-RUN python -m pip install --upgrade pip && \
-    pip install -r requirements.txt
+RUN python3 -m pip install --upgrade pip && \
+    python3 -m pip install -r requirements.txt
 
 # Copy the application and test files
 COPY app.py .
