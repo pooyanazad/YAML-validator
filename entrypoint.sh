@@ -6,4 +6,4 @@ if [[ "$1" == "/bin/bash" ]] || [[ "$1" == "bash" ]] || [[ "$1" == "sh" ]] || [[
 fi
 
 # Otherwise, run the Python app with the provided arguments
-exec python /app/app.py "$@"
+exec python3 /app/app.py "$@"

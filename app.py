@@ -2,7 +2,7 @@
 """
 YAML Validator Script
 Validates YAML files for syntax, linting, and security issues.
-Usage: python app.py ./conf.yaml
+Usage: python3 app.py ./conf.yaml
 """
 
 import sys
@@ -33,6 +33,7 @@ except ImportError:
 
 # ===== CONFIGURATION & CONSTANTS =====
 CHECKOV_AVAILABLE = True
+PYTHON_EXECUTABLE = sys.executable
 
 class Severity(Enum):
     CRITICAL = "CRITICAL"
@@ -82,20 +83,20 @@ def check_dependencies():
     
     # Check yamllint
     try:
-        subprocess.run(['python', '-m', 'yamllint', '--version'], capture_output=True, check=True)
+        subprocess.run([PYTHON_EXECUTABLE, '-m', 'yamllint', '--version'], capture_output=True, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
         missing_tools.append('yamllint')
     
     # Check checkov (optional)
     try:
-        subprocess.run(['python', '-c', 'import checkov'], capture_output=True, check=True)
+        subprocess.run([PYTHON_EXECUTABLE, '-c', 'import checkov'], capture_output=True, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
         CHECKOV_AVAILABLE = False
         print_colored("Warning: checkov not available, security checks will be skipped", Severity.MEDIUM)
     
     if missing_tools:
         print_colored(f"Missing required tools: {', '.join(missing_tools)}", Severity.CRITICAL, bold=True)
-        print_colored("Install with: pip install yamllint checkov", Severity.INFO)
+        print_colored("Install with: python3 -m pip install yamllint checkov", Severity.INFO)
         sys.exit(1)
 
 def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
@@ -134,7 +135,7 @@ def run_yamllint(file_path: str) -> List[ValidationIssue]:
     issues = []
     try:
         result = subprocess.run(
-            ['python', '-m', 'yamllint', '-f', 'parsable', file_path],
+            [PYTHON_EXECUTABLE, '-m', 'yamllint', '-f', 'parsable', file_path],
             capture_output=True,
             text=True
         )
@@ -175,7 +176,7 @@ def run_checkov(file_path: str) -> List[ValidationIssue]:
     issues = []
     try:
         result = subprocess.run(
-            ['python', '-m', 'checkov.main', '-f', file_path, '--output', 'json'],
+            [PYTHON_EXECUTABLE, '-m', 'checkov.main', '-f', file_path, '--output', 'json'],
             capture_output=True,
             text=True
         )
@@ -354,8 +355,8 @@ def print_summary_table(summary: Dict[str, int]):
 def main():
     """Main function"""
     if len(sys.argv) != 2:
-        print_colored("Usage: python app.py <yaml_file>", Severity.CRITICAL, bold=True)
-        print_colored("Example: python app.py ./conf.yaml", Severity.INFO)
+        print_colored("Usage: python3 app.py <yaml_file>", Severity.CRITICAL, bold=True)
+        print_colored("Example: python3 app.py ./conf.yaml", Severity.INFO)
         sys.exit(1)
     
     yaml_file = sys.argv[1]
