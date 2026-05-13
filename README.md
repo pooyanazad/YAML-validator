@@ -64,6 +64,7 @@ The validator provides detailed reports including:
 
 - **Repository**: `pooyanazad/yaml-checker`
 - **Valid tag**: Latest is updated always
+- **Runtime**: Docker image is based on `python:3.12-slim`
 
 ## Requirements
 
@@ -81,5 +82,5 @@ The validator provides detailed reports including:
 
 ## Monthly Automated Releases
 
-- Scheduled : Every 1st of the month at 00:00 UTC with auto-incrementing versions ( v1.0.3-YYYYMMDD , v1.0.4-YYYYMMDD , etc.)
+- Scheduled : Every 1st of the month at 00:00 UTC with auto-incrementing versions starting from v2.0.1-YYYYMMDD, then v2.0.2-YYYYMMDD, etc.
 - Includes : Fresh Docker builds, comprehensive testing, Docker Hub deployment, and GitHub releases with usage examples
