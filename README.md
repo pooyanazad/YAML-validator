@@ -1,86 +1,99 @@
 # YAML Validator
 
-A comprehensive YAML validation tool that performs syntax checking, linting, and security analysis using industry-standard tools.
+Validate YAML files for syntax errors, style issues, and security misconfigurations — all in one command.
 
-## What We Check
+<img width="881" height="571" alt="YAML Validator output" src="https://github.com/user-attachments/assets/0a3278f9-9f86-431c-90f7-e3d122f0043b" />
 
-### 🔍 **Syntax Validation**
-- YAML structure and formatting
-- Proper indentation and syntax rules
-- Valid YAML document structure
+## Getting Started
 
-### 📋 **Linting (yamllint)**
-- Code style and formatting issues
-- Indentation consistency
-- Line length violations
-- Trailing spaces and empty lines
-- Document structure best practices
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) installed on your system.
 
-### 🔒 **Security Analysis (Checkov)**
-- Security misconfigurations
-- Hardcoded secrets detection
-- Infrastructure security best practices
-- Compliance violations
-- Potential security vulnerabilities
+### One-time setup (Linux/macOS)
 
-## How it look like 
-<img width="881" height="571" alt="image" src="https://github.com/user-attachments/assets/0a3278f9-9f86-431c-90f7-e3d122f0043b" />
+Run this once to create the `ytest` shortcut:
+
+```bash
+# Bash
+echo 'alias ytest="docker run --rm -v \"\$(pwd):/data\" pooyanazad/yaml-checker"' >> ~/.bashrc && source ~/.bashrc
+```
+
+<details>
+<summary>Using Zsh instead?</summary>
+
+```bash
+echo 'alias ytest="docker run --rm -v \"\$(pwd):/data\" pooyanazad/yaml-checker"' >> ~/.zshrc && source ~/.zshrc
+```
+
+</details>
+
+Now you can use `ytest` anywhere.
 
 ## Usage
 
-### Linux/macOS
 ```bash
-docker run -v "$(pwd):/data" pooyanazad/yaml-checker <yaml-file>
+# Single file
+ytest myfile.yaml
+
+# Multiple files
+ytest config.yaml deployment.yaml secrets.yaml
+
+# Entire directory (recursive)
+ytest ./configs/
+
+# Glob pattern
+ytest ./configs/**/*.yaml
 ```
 
-### PowerShell/CMD on Windows
+<details>
+<summary>Windows / without the alias</summary>
+
+**PowerShell / CMD:**
 ```bash
-docker run -v "%cd%:/data" pooyanazad/yaml-checker <yaml-file>
+docker run --rm -v "%cd%:/data" pooyanazad/yaml-checker myfile.yaml
 ```
 
-### Git Bash on Windows
+**Git Bash:**
 ```bash
-MSYS_NO_PATHCONV=1 docker run -v "$(pwd):/data" pooyanazad/yaml-checker <yaml-file>
-```
-### My personal usage
-I define below command on .bashrc as an alias
-```
-alias ytest='docker run -v "$(pwd):/data" pooyanazad/yaml-checker'
-```
-I can use this anywhere simply
-```
-ytest ping.yaml
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd):/data" pooyanazad/yaml-checker myfile.yaml
 ```
 
-## Output
+**Linux/macOS (no alias):**
+```bash
+docker run --rm -v "$(pwd):/data" pooyanazad/yaml-checker myfile.yaml
+```
 
-The validator provides detailed reports including:
-- **Syntax Issues**: Parse errors and structural problems
-- **Linting Issues**: Style and formatting violations with severity levels
-- **Security Issues**: Security misconfigurations and vulnerabilities
-- **Summary**: Total count of issues by severity (Critical, High, Medium, Low)
+</details>
 
-## Docker Image
+## What It Checks
 
-- **Repository**: `pooyanazad/yaml-checker`
-- **Valid tag**: Latest is updated always
-- **Runtime**: Docker image is based on `python:3.12-slim`
+| Layer | Tool | What it catches |
+|---|---|---|
+| **Syntax** | PyYAML | Parse errors, broken structure, invalid indentation |
+| **Linting** | yamllint | Style issues, line length, trailing spaces, consistency |
+| **Security** | Checkov | Hardcoded secrets, privileged containers, misconfigurations |
 
-## Requirements
-
-- Docker installed on your system
-- YAML files to validate
+Issues are grouped by severity (**Critical → High → Medium → Low**) with colored output and a summary table. When scanning multiple files, you get a combined report showing which files have problems.
 
 ## Features
 
-✅ **Multi-platform support** (Windows, Linux, macOS)  
-✅ **Volume mounting** for external file access  
-✅ **Comprehensive validation** (syntax, style, security)  
-✅ **Detailed reporting** with severity levels  
-✅ **Industry-standard tools** (yamllint, checkov)  
-✅ **Zero configuration** required
+✅ Multi-file & directory scanning  
+✅ Glob pattern support (`**/*.yaml`)  
+✅ Cross-platform (Windows, Linux, macOS)  
+✅ Multi-arch Docker image (amd64/arm64)  
+✅ Colored severity-based reporting  
+✅ Zero configuration required  
 
-## Monthly Automated Releases
+## Docker Image
 
-- Scheduled : Every 1st of the month at 00:00 UTC with auto-incrementing versions starting from v2.0.1-YYYYMMDD, then v2.0.2-YYYYMMDD, etc.
-- Includes : Fresh Docker builds, comprehensive testing, Docker Hub deployment, and GitHub releases with usage examples
+| | |
+|---|---|
+| **Image** | `pooyanazad/yaml-checker` |
+| **Tag** | `latest` is always up to date |
+| **Base** | `python:3.12-slim` |
+| **Platforms** | `linux/amd64`, `linux/arm64` |
+
+## Release Notes
+
+<!-- RELEASE_NOTES_START -->
+_Release notes are automatically updated on each monthly release._
+<!-- RELEASE_NOTES_END -->
