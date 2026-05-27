@@ -47,33 +47,34 @@ jobs:
         
         # Get current date for version
         DATE=$(date +%Y%m%d)
-        MAJOR_MINOR="2.0"
+        MAJOR="3"
+        PATCH="0"
         
         # Get the latest tag that matches our pattern
-        LATEST_TAG=$(git tag -l "v${MAJOR_MINOR}.*-*" | sort -V | tail -n 1)
+        LATEST_TAG=$(git tag -l "v${MAJOR}.*.${PATCH}-*" | sort -V | tail -n 1)
         
         if [ -z "$LATEST_TAG" ]; then
-          # No previous v2.0 tags, start with v2.0.1
-          PATCH_VERSION=1
+          # No previous v3 tags, start with v3.0.0
+          MINOR_VERSION=0
         else
-          # Extract patch version from latest tag (e.g., v2.0.1-20260601 -> 1)
-          PATCH_VERSION=$(echo "$LATEST_TAG" | sed 's/v2\.0\.\([0-9]*\)-.*/\1/')
+          # Extract minor version from latest tag (e.g., v3.1.0-20260601 -> 1)
+          MINOR_VERSION=$(echo "$LATEST_TAG" | sed "s/v${MAJOR}\.\([0-9]*\)\.${PATCH}-.*/\1/")
           
-          # Increment patch version
-          PATCH_VERSION=$((PATCH_VERSION + 1))
+          # Increment minor version
+          MINOR_VERSION=$((MINOR_VERSION + 1))
           
           # Check if the generated version already exists and increment if needed
-          while git tag -l "v${MAJOR_MINOR}.${PATCH_VERSION}-${DATE}" | grep -q "v${MAJOR_MINOR}.${PATCH_VERSION}-${DATE}"; do
-            PATCH_VERSION=$((PATCH_VERSION + 1))
+          while git tag -l "v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}" | grep -q "v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}"; do
+            MINOR_VERSION=$((MINOR_VERSION + 1))
           done
         fi
         
-        VERSION="v${MAJOR_MINOR}.${PATCH_VERSION}-${DATE}"
+        VERSION="v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}"
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
         echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
         echo "Generated version: ${VERSION}"
         echo "Previous latest tag: ${LATEST_TAG}"
-        echo "New patch version: ${PATCH_VERSION}"
+        echo "New minor version: ${MINOR_VERSION}"
         echo "Date: ${DATE}"
         
     - name: Build Docker image (test)
