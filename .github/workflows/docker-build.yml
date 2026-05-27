@@ -31,7 +31,11 @@ jobs:
       run: |
         echo "Current UTC time: $(date -u)"
         echo "Current local time: $(date)"
-      
+
+    # Multi-arch support
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       
@@ -55,8 +59,7 @@ jobs:
           # Extract patch version from latest tag (e.g., v2.0.1-20260601 -> 1)
           PATCH_VERSION=$(echo "$LATEST_TAG" | sed 's/v2\.0\.\([0-9]*\)-.*/\1/')
           
-          # If running on the same date as latest tag, increment patch version
-          # Otherwise, increment patch version for new date
+          # Increment patch version
           PATCH_VERSION=$((PATCH_VERSION + 1))
           
           # Check if the generated version already exists and increment if needed
@@ -67,12 +70,13 @@ jobs:
         
         VERSION="v${MAJOR_MINOR}.${PATCH_VERSION}-${DATE}"
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
         echo "Generated version: ${VERSION}"
         echo "Previous latest tag: ${LATEST_TAG}"
         echo "New patch version: ${PATCH_VERSION}"
         echo "Date: ${DATE}"
         
-    - name: Build Docker image
+    - name: Build Docker image (test)
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -83,27 +87,48 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         
-    - name: Test Docker image with clean YAML
+    - name: Test - single clean YAML file
       run: |
         echo "Testing with clean YAML file..."
         docker run --rm -v "${{ github.workspace }}:/data" \
           ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
           /data/tests/test3_clean.yaml
           
-    - name: Test Docker image with problematic YAML
+    - name: Test - single problematic YAML file
       run: |
         echo "Testing with problematic YAML file (should show issues)..."
         docker run --rm -v "${{ github.workspace }}:/data" \
           ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
           /data/tests/test1_issues.yaml || true
           
-    - name: Test Docker image with security test
+    - name: Test - security scan
       run: |
         echo "Testing with security test file..."
         docker run --rm -v "${{ github.workspace }}:/data" \
           ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
           /data/tests/security_test1.yaml || true
-          
+
+    - name: Test - multi-file validation
+      run: |
+        echo "Testing multi-file validation..."
+        docker run --rm -v "${{ github.workspace }}:/data" \
+          ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
+          /data/tests/test3_clean.yaml /data/tests/test1_issues.yaml || true
+
+    - name: Test - directory scan
+      run: |
+        echo "Testing directory scan..."
+        docker run --rm -v "${{ github.workspace }}:/data" \
+          ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
+          /data/tests/ || true
+
+    - name: Test - help and version flags
+      run: |
+        echo "Testing --help flag..."
+        docker run --rm ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} --help
+        echo "Testing --version flag..."
+        docker run --rm ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} --version
+
     - name: Login to Docker Hub
       if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
       uses: docker/login-action@v3
@@ -112,17 +137,76 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
         
-    - name: Push Docker image
+    - name: Push Docker image (multi-arch)
       if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
       uses: docker/build-push-action@v5
       with:
         context: .
         push: true
+        platforms: linux/amd64,linux/arm64
         tags: |
           ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
           ${{ env.IMAGE_NAME }}:latest
         cache-from: type=gha
         cache-to: type=gha,mode=max
+
+    - name: Collect release notes
+      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      id: release_notes
+      run: |
+        LATEST_TAG="${{ steps.version.outputs.latest_tag }}"
+        VERSION="${{ steps.version.outputs.version }}"
+        DATE=$(date +%Y-%m-%d)
+
+        # Get commit messages since last release
+        if [ -z "$LATEST_TAG" ]; then
+          COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+        else
+          COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+        fi
+
+        # If no commits, use a fallback message
+        if [ -z "$COMMITS" ]; then
+          COMMITS="- Monthly rebuild with latest dependencies"
+        fi
+
+        # Save for use in later steps (multiline output)
+        {
+          echo "commits<<EOF"
+          echo "$COMMITS"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
+        echo "date=${DATE}" >> $GITHUB_OUTPUT
+
+        echo "Collected commits:"
+        echo "$COMMITS"
+
+    - name: Update README with release notes
+      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        DATE="${{ steps.release_notes.outputs.date }}"
+        COMMITS="${{ steps.release_notes.outputs.commits }}"
+
+        # Build the release notes block
+        RELEASE_BLOCK="<!-- RELEASE_NOTES_START -->\n### ${VERSION} — ${DATE}\n\n**Changes since last release:**\n${COMMITS}\n\n**Docker Image:** \`${{ env.IMAGE_NAME }}:${VERSION}\`\n<!-- RELEASE_NOTES_END -->"
+
+        # Replace everything between the markers in README.md
+        sed -i "/<!-- RELEASE_NOTES_START -->/,/<!-- RELEASE_NOTES_END -->/c\\${RELEASE_BLOCK}" README.md
+
+        echo "Updated README.md with release notes for ${VERSION}"
+        cat README.md | tail -20
+
+    - name: Commit and push README
+      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add README.md
+        git diff --cached --quiet && echo "No README changes to commit" || {
+          git commit -m "docs: update release notes for ${{ steps.version.outputs.version }} [skip ci]"
+          git push
+        }
         
     - name: Create GitHub Release
       if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -137,22 +221,29 @@ jobs:
           - `${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}`
           - `${{ env.IMAGE_NAME }}:latest`
           
+          ### Changes
+          ${{ steps.release_notes.outputs.commits }}
+          
           ### Features
           - YAML syntax validation
           - Linting with yamllint
           - Security scanning with Checkov
-          - Cross-platform Docker support
+          - Multi-file & directory scanning
+          - Cross-platform Docker support (amd64/arm64)
           
           ### Usage
           ```bash
-          # Git Bash on Windows
-          MSYS_NO_PATHCONV=1 docker run -v "${PWD}:/data" ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} /data/your_file.yaml
-          
-          # PowerShell/CMD on Windows
-          docker run -v "${PWD}:/data" ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} /data/your_file.yaml
-          
-          # Linux/macOS
-          docker run -v "$(pwd):/data" ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} /data/your_file.yaml
+          # Quick install
+          echo 'alias ytest='\''docker run --rm -v "$(pwd):/data" ${{ env.IMAGE_NAME }}'\''' >> ~/.bashrc && source ~/.bashrc
+
+          # Single file
+          ytest your_file.yaml
+
+          # Multiple files
+          ytest file1.yaml file2.yaml
+
+          # Entire directory
+          ytest ./configs/
           ```
         draft: false
         prerelease: false
@@ -164,6 +255,12 @@ jobs:
         echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Image**: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Latest**: ${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+        echo "- **Platforms**: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
         echo "- **Tests**: Passed ✅" >> $GITHUB_STEP_SUMMARY
-        echo "- **Status**: Pushed to Docker Hub 🚀" >> $GITHUB_STEP_SUMMARY
-        echo "- **Release**: Created on GitHub 📦" >> $GITHUB_STEP_SUMMARY
+        if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "- **Status**: Pushed to Docker Hub 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release**: Created on GitHub 📦" >> $GITHUB_STEP_SUMMARY
+          echo "- **README**: Updated with release notes 📝" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Status**: Build & test only (push on schedule/manual) 🧪" >> $GITHUB_STEP_SUMMARY
+        fi
