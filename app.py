@@ -9,10 +9,15 @@ import sys
 import os
 import subprocess
 import json
+import glob
+import argparse
 import yaml
+from pathlib import Path
 from typing import Dict, List, Any
 from dataclasses import dataclass
 from enum import Enum
+
+__version__ = "2.1.0"
 
 # ===== IMPORTS & DEPENDENCIES =====
 try:
@@ -146,8 +151,16 @@ def run_yamllint(file_path: str) -> List[ValidationIssue]:
                 if len(parts) >= 4:
                     line_num = int(parts[1]) if parts[1].isdigit() else None
                     column_num = int(parts[2]) if parts[2].isdigit() else None
-                    level = parts[3].strip().strip('[]')
-                    message = ':'.join(parts[4:]).strip()
+                    # Rejoin everything after file:line:col: and parse [level] message
+                    rest = ':'.join(parts[3:]).strip()
+                    # Format is "[level] message" — extract level from brackets
+                    if rest.startswith('['):
+                        bracket_end = rest.index(']')
+                        level = rest[1:bracket_end]
+                        message = rest[bracket_end + 1:].strip()
+                    else:
+                        level = rest
+                        message = ''
                     
                     severity = Severity.MEDIUM if level == 'error' else Severity.LOW
                     
@@ -351,46 +364,129 @@ def print_summary_table(summary: Dict[str, int]):
     total_color = Severity.CRITICAL if summary['total'] > 0 else Severity.INFO
     print_colored(f"{'TOTAL':<12} {summary['total']:<8} {'Issues Found' if summary['total'] > 0 else 'All Clean'}", total_color, bold=True)
 
+# ===== FILE RESOLUTION =====
+def resolve_files(paths: List[str]) -> List[str]:
+    """Resolve file paths, directories, and glob patterns to a list of YAML files"""
+    yaml_extensions = {'.yaml', '.yml'}
+    resolved = []
+    seen = set()
+
+    for path_arg in paths:
+        # Try glob expansion first
+        expanded = glob.glob(path_arg, recursive=True)
+
+        # If glob didn't match anything, treat as literal path
+        if not expanded:
+            expanded = [path_arg]
+
+        for item in expanded:
+            p = Path(item).resolve()
+
+            if p.is_dir():
+                # Recursively find all YAML files in the directory
+                for ext in yaml_extensions:
+                    for yaml_file in sorted(p.rglob(f'*{ext}')):
+                        real = str(yaml_file.resolve())
+                        if real not in seen:
+                            seen.add(real)
+                            resolved.append(str(yaml_file))
+            elif p.is_file():
+                real = str(p)
+                if real not in seen:
+                    seen.add(real)
+                    resolved.append(str(p))
+            else:
+                print_colored(f"Warning: '{path_arg}' not found, skipping", Severity.MEDIUM)
+
+    return resolved
+
 # ===== INITIALIZATION & STARTUP =====
 def main():
     """Main function"""
-    if len(sys.argv) != 2:
-        print_colored("Usage: python3 app.py <yaml_file>", Severity.CRITICAL, bold=True)
-        print_colored("Example: python3 app.py ./conf.yaml", Severity.INFO)
+    parser = argparse.ArgumentParser(
+        prog='yaml-validator',
+        description='Validate YAML files for syntax, linting, and security issues.',
+        epilog='Examples:\n'
+               '  python3 app.py config.yaml\n'
+               '  python3 app.py config.yaml deployment.yaml\n'
+               '  python3 app.py ./configs/\n'
+               '  python3 app.py ./configs/**/*.yaml\n',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        'files', nargs='+', metavar='FILE',
+        help='YAML files, directories, or glob patterns to validate'
+    )
+    parser.add_argument(
+        '--version', action='version',
+        version=f'%(prog)s {__version__}'
+    )
+
+    args = parser.parse_args()
+
+    # Resolve all input paths to actual YAML files
+    yaml_files = resolve_files(args.files)
+
+    if not yaml_files:
+        print_colored("Error: No YAML files found for the given paths", Severity.CRITICAL, bold=True)
         sys.exit(1)
-    
-    yaml_file = sys.argv[1]
-    
-    # Check if file exists
-    if not os.path.exists(yaml_file):
-        print_colored(f"Error: File '{yaml_file}' not found", Severity.CRITICAL, bold=True)
-        sys.exit(1)
-    
+
     # Check dependencies
     check_dependencies()
-    
-    # Validate the file
-    result = validate_yaml_file(yaml_file)
-    
-    # Print detailed issues
-    print_issues(result.issues)
-    
-    # Print summary table
-    print_summary_table(result.summary)
-    
-    # Final status
-    print_colored("\n" + "=" * 60, Severity.INFO)
-    if result.summary['total'] == 0:
-        print_colored("🎉 Validation completed successfully! No issues found.", Severity.INFO, bold=True)
-        sys.exit(0)
-    else:
+
+    # Validate all files
+    results = []
+    has_critical_high = False
+    total_issues = 0
+
+    for yaml_file in yaml_files:
+        result = validate_yaml_file(yaml_file)
+        results.append(result)
+
+        # Print detailed issues per file
+        print_issues(result.issues)
+
+        # Print per-file summary
+        print_summary_table(result.summary)
+
         critical_high = result.summary['critical'] + result.summary['high']
         if critical_high > 0:
-            print_colored(f"💥 Validation failed! Found {critical_high} critical/high severity issues.", Severity.CRITICAL, bold=True)
-            sys.exit(1)
-        else:
-            print_colored(f"⚠️  Validation completed with {result.summary['total']} minor issues.", Severity.MEDIUM, bold=True)
-            sys.exit(0)
+            has_critical_high = True
+        total_issues += result.summary['total']
+
+    # Combined summary for multi-file runs
+    if len(yaml_files) > 1:
+        print_colored("\n" + "=" * 60, Severity.INFO)
+        print_colored("📊 Combined Results:", Severity.INFO, bold=True)
+        print_colored(f"   Files scanned: {len(yaml_files)}", Severity.INFO)
+        print_colored(f"   Total issues:  {total_issues}", Severity.INFO)
+
+        combined = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0, 'info': 0, 'total': 0}
+        for r in results:
+            for key in combined:
+                combined[key] += r.summary[key]
+        print_summary_table(combined)
+
+        # List files with issues
+        files_with_issues = [r for r in results if r.summary['total'] > 0]
+        if files_with_issues:
+            print_colored("\n📁 Files with issues:", Severity.MEDIUM, bold=True)
+            for r in files_with_issues:
+                ch = r.summary['critical'] + r.summary['high']
+                icon = "💥" if ch > 0 else "⚠️"
+                print_colored(f"   {icon} {r.file_path} ({r.summary['total']} issues)", Severity.MEDIUM)
+
+    # Final status
+    print_colored("\n" + "=" * 60, Severity.INFO)
+    if total_issues == 0:
+        print_colored("🎉 Validation completed successfully! No issues found.", Severity.INFO, bold=True)
+        sys.exit(0)
+    elif has_critical_high:
+        print_colored(f"💥 Validation failed! Found critical/high severity issues.", Severity.CRITICAL, bold=True)
+        sys.exit(1)
+    else:
+        print_colored(f"⚠️  Validation completed with {total_issues} minor issues.", Severity.MEDIUM, bold=True)
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()
