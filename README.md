@@ -30,6 +30,9 @@ Now you can use `ytest` anywhere.
 
 ## Usage
 
+> [!NOTE]
+> The multiple files and directory scanning features will be available in **v3**, starting on June 1st.
+
 ```bash
 # Single file
 ytest myfile.yaml
