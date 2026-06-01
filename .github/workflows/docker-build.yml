@@ -155,20 +155,23 @@ jobs:
       if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
       id: release_notes
       run: |
-        LATEST_TAG="${{ steps.version.outputs.latest_tag }}"
         VERSION="${{ steps.version.outputs.version }}"
         DATE=$(date +%Y-%m-%d)
 
+        # Find the actual latest tag across ALL versions (v2, v3, etc.)
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        echo "Latest tag found: ${LATEST_TAG}"
+
         # Get commit messages since last release
         if [ -z "$LATEST_TAG" ]; then
-          COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          COMMITS=$(git log --pretty=format:"* %s (%h)" --no-merges)
         else
-          COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"* %s (%h)" --no-merges)
         fi
 
         # If no commits, use a fallback message
         if [ -z "$COMMITS" ]; then
-          COMMITS="- Monthly rebuild with latest dependencies"
+          COMMITS="* Monthly rebuild with latest dependencies"
         fi
 
         # Save for use in later steps (multiline output)
@@ -178,25 +181,54 @@ jobs:
           echo "EOF"
         } >> $GITHUB_OUTPUT
         echo "date=${DATE}" >> $GITHUB_OUTPUT
+        echo "latest_found=${LATEST_TAG}" >> $GITHUB_OUTPUT
 
-        echo "Collected commits:"
+        echo "Collected commits since ${LATEST_TAG}:"
         echo "$COMMITS"
 
     - name: Update README with release notes
       if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
+        DATE: ${{ steps.release_notes.outputs.date }}
+        COMMITS: ${{ steps.release_notes.outputs.commits }}
+        IMAGE_NAME: ${{ env.IMAGE_NAME }}
       run: |
-        VERSION="${{ steps.version.outputs.version }}"
-        DATE="${{ steps.release_notes.outputs.date }}"
-        COMMITS="${{ steps.release_notes.outputs.commits }}"
+        # Use Python to safely handle multiline content and special characters
+        python3 << 'PYEOF'
+        import re, os
 
-        # Build the release notes block
-        RELEASE_BLOCK="<!-- RELEASE_NOTES_START -->\n### ${VERSION} — ${DATE}\n\n**Changes since last release:**\n${COMMITS}\n\n**Docker Image:** \`${{ env.IMAGE_NAME }}:${VERSION}\`\n<!-- RELEASE_NOTES_END -->"
+        version = os.environ['VERSION']
+        date    = os.environ['DATE']
+        commits = os.environ['COMMITS']
+        image   = os.environ['IMAGE_NAME']
 
-        # Replace everything between the markers in README.md
-        sed -i "/<!-- RELEASE_NOTES_START -->/,/<!-- RELEASE_NOTES_END -->/c\\${RELEASE_BLOCK}" README.md
+        block = (
+            f"<!-- RELEASE_NOTES_START -->\n"
+            f"### {version} — {date}\n\n"
+            f"**Changes since last release:**\n"
+            f"{commits}\n\n"
+            f"**Docker Image:** `{image}:{version}`\n"
+            f"<!-- RELEASE_NOTES_END -->"
+        )
 
-        echo "Updated README.md with release notes for ${VERSION}"
-        cat README.md | tail -20
+        with open('README.md', 'r') as f:
+            content = f.read()
+
+        updated = re.sub(
+            r'<!-- RELEASE_NOTES_START -->.*?<!-- RELEASE_NOTES_END -->',
+            block,
+            content,
+            flags=re.DOTALL
+        )
+
+        with open('README.md', 'w') as f:
+            f.write(updated)
+
+        print(f'Updated README.md with release notes for {version}')
+        PYEOF
+
+        tail -20 README.md
 
     - name: Commit and push README
       if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
