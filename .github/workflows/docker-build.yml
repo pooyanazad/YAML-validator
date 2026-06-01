@@ -3,9 +3,7 @@ name: Docker Build and Push
 on:
   schedule:
     - cron: '00 00 1 * *'
-  # Allow manual trigger
   workflow_dispatch:
-  # Run on push to main for testing
   push:
     branches: [ main ]
 
@@ -16,284 +14,325 @@ permissions:
 env:
   REGISTRY: docker.io
   IMAGE_NAME: pooyanazad/yaml-checker
+  TEST_IMAGE: yaml-checker:ci
 
+# ─────────────────────────────────────────────────────────────────────────────
 jobs:
-  build-test-push:
+
+  # ── 1. SETUP ────────────────────────────────────────────────────────────────
+  setup:
+    name: 🔧 Setup
     runs-on: ubuntu-latest
-    
+    outputs:
+      version:    ${{ steps.version.outputs.version }}
+      latest_tag: ${{ steps.version.outputs.latest_tag }}
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-      
-    - name: Print current time
-      run: |
-        echo "Current UTC time: $(date -u)"
-        echo "Current local time: $(date)"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    # Multi-arch support
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
+      - name: Print current time
+        run: |
+          echo "Current UTC time: $(date -u)"
+          echo "Triggered by: ${{ github.event_name }}"
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
-    - name: Generate version number
-      id: version
-      run: |
-        # Fetch all tags from remote
-        git fetch --tags
-        
-        # Get current date for version
-        DATE=$(date +%Y%m%d)
-        MAJOR="3"
-        PATCH="0"
-        
-        # Get the latest tag that matches our pattern
-        LATEST_TAG=$(git tag -l "v${MAJOR}.*.${PATCH}-*" | sort -V | tail -n 1)
-        
-        if [ -z "$LATEST_TAG" ]; then
-          # No previous v3 tags, start with v3.0.0
-          MINOR_VERSION=0
-        else
-          # Extract minor version from latest tag (e.g., v3.1.0-20260601 -> 1)
-          MINOR_VERSION=$(echo "$LATEST_TAG" | sed "s/v${MAJOR}\.\([0-9]*\)\.${PATCH}-.*/\1/")
-          
-          # Increment minor version
-          MINOR_VERSION=$((MINOR_VERSION + 1))
-          
-          # Check if the generated version already exists and increment if needed
-          while git tag -l "v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}" | grep -q "v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}"; do
+      - name: Generate version number
+        id: version
+        run: |
+          git fetch --tags
+          DATE=$(date +%Y%m%d)
+          MAJOR="3"
+          PATCH="0"
+
+          LATEST_TAG=$(git tag -l "v${MAJOR}.*.${PATCH}-*" | sort -V | tail -n 1)
+
+          if [ -z "$LATEST_TAG" ]; then
+            MINOR_VERSION=0
+          else
+            MINOR_VERSION=$(echo "$LATEST_TAG" | sed "s/v${MAJOR}\.\([0-9]*\)\.${PATCH}-.*/\1/")
             MINOR_VERSION=$((MINOR_VERSION + 1))
-          done
-        fi
-        
-        VERSION="v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}"
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
-        echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
-        echo "Generated version: ${VERSION}"
-        echo "Previous latest tag: ${LATEST_TAG}"
-        echo "New minor version: ${MINOR_VERSION}"
-        echo "Date: ${DATE}"
-        
-    - name: Build Docker image (test)
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        load: true
-        tags: |
-          ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-          ${{ env.IMAGE_NAME }}:latest
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        
-    - name: Test - single clean YAML file
-      run: |
-        echo "Testing with clean YAML file..."
-        docker run --rm -v "${{ github.workspace }}:/data" \
-          ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
-          /data/tests/test3_clean.yaml
-          
-    - name: Test - single problematic YAML file
-      run: |
-        echo "Testing with problematic YAML file (should show issues)..."
-        docker run --rm -v "${{ github.workspace }}:/data" \
-          ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
-          /data/tests/test1_issues.yaml || true
-          
-    - name: Test - security scan
-      run: |
-        echo "Testing with security test file..."
-        docker run --rm -v "${{ github.workspace }}:/data" \
-          ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
-          /data/tests/security_test1.yaml || true
+            while git tag -l "v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}" | grep -q "v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}"; do
+              MINOR_VERSION=$((MINOR_VERSION + 1))
+            done
+          fi
 
-    - name: Test - multi-file validation
-      run: |
-        echo "Testing multi-file validation..."
-        docker run --rm -v "${{ github.workspace }}:/data" \
-          ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
-          /data/tests/test3_clean.yaml /data/tests/test1_issues.yaml || true
+          VERSION="v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}"
+          echo "version=${VERSION}"       >> $GITHUB_OUTPUT
+          echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
+          echo "✅ Next version: ${VERSION}"
+          echo "📌 Previous tag: ${LATEST_TAG}"
 
-    - name: Test - directory scan
-      run: |
-        echo "Testing directory scan..."
-        docker run --rm -v "${{ github.workspace }}:/data" \
-          ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
-          /data/tests/ || true
+  # ── 2. BUILD ─────────────────────────────────────────────────────────────────
+  build:
+    name: 🐳 Build Docker Image
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Test - help and version flags
-      run: |
-        echo "Testing --help flag..."
-        docker run --rm ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} --help
-        echo "Testing --version flag..."
-        docker run --rm ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} --version
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Login to Docker Hub
-      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-        
-    - name: Push Docker image (multi-arch)
-      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        platforms: linux/amd64,linux/arm64
-        tags: |
-          ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-          ${{ env.IMAGE_NAME }}:latest
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          tags: ${{ env.TEST_IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-    - name: Collect release notes
-      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-      id: release_notes
-      run: |
-        VERSION="${{ steps.version.outputs.version }}"
-        DATE=$(date +%Y-%m-%d)
+      - name: Save image as artifact
+        run: |
+          docker save ${{ env.TEST_IMAGE }} | gzip > image.tar.gz
+          echo "Image saved — size: $(du -sh image.tar.gz | cut -f1)"
 
-        # Find the actual latest tag across ALL versions (v2, v3, etc.)
-        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-        echo "Latest tag found: ${LATEST_TAG}"
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: image.tar.gz
+          retention-days: 1
 
-        # Get commit messages since last release
-        if [ -z "$LATEST_TAG" ]; then
-          COMMITS=$(git log --pretty=format:"* %s (%h)" --no-merges)
-        else
-          COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"* %s (%h)" --no-merges)
-        fi
+  # ── 3. TEST ──────────────────────────────────────────────────────────────────
+  test:
+    name: 🧪 Test
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-        # If no commits, use a fallback message
-        if [ -z "$COMMITS" ]; then
-          COMMITS="* Monthly rebuild with latest dependencies"
-        fi
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
 
-        # Save for use in later steps (multiline output)
-        {
-          echo "commits<<EOF"
+      - name: Load Docker image
+        run: docker load < image.tar.gz
+
+      - name: Single clean file
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/data" \
+            ${{ env.TEST_IMAGE }} /data/tests/test3_clean.yaml
+
+      - name: Single file with issues
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/data" \
+            ${{ env.TEST_IMAGE }} /data/tests/test1_issues.yaml || true
+
+      - name: Security scan
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/data" \
+            ${{ env.TEST_IMAGE }} /data/tests/security_test1.yaml || true
+
+      - name: Multi-file scan
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/data" \
+            ${{ env.TEST_IMAGE }} \
+            /data/tests/test3_clean.yaml /data/tests/test1_issues.yaml || true
+
+      - name: Directory scan
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/data" \
+            ${{ env.TEST_IMAGE }} /data/tests/ || true
+
+      - name: Flags — help and version
+        run: |
+          docker run --rm ${{ env.TEST_IMAGE }} --help
+          docker run --rm ${{ env.TEST_IMAGE }} --version
+
+  # ── 4. [RELEASE] PUSH DOCKER IMAGE ───────────────────────────────────────────
+  release-image:
+    name: 🚀 [Release] Push Docker Image
+    runs-on: ubuntu-latest
+    needs: [setup, test]
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (multi-arch)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push multi-arch image (amd64 + arm64)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.version }}
+            ${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 5. [RELEASE] RELEASE NOTES ───────────────────────────────────────────────
+  release-notes:
+    name: 📝 [Release] Release Notes
+    runs-on: ubuntu-latest
+    needs: [setup, release-image]
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    outputs:
+      commits: ${{ steps.collect.outputs.commits }}
+      date:    ${{ steps.collect.outputs.date }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect commits since last release
+        id: collect
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "Latest tag found: ${LATEST_TAG}"
+
+          if [ -z "$LATEST_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"* %s (%h)" --no-merges)
+          else
+            COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"* %s (%h)" --no-merges)
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            COMMITS="* Monthly rebuild with latest dependencies"
+          fi
+
+          {
+            echo "commits<<EOF"
+            echo "$COMMITS"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          echo "date=${DATE}" >> $GITHUB_OUTPUT
+
+          echo "Commits since ${LATEST_TAG}:"
           echo "$COMMITS"
-          echo "EOF"
-        } >> $GITHUB_OUTPUT
-        echo "date=${DATE}" >> $GITHUB_OUTPUT
-        echo "latest_found=${LATEST_TAG}" >> $GITHUB_OUTPUT
 
-        echo "Collected commits since ${LATEST_TAG}:"
-        echo "$COMMITS"
+      - name: Update README.md with release notes
+        env:
+          VERSION:    ${{ needs.setup.outputs.version }}
+          DATE:       ${{ steps.collect.outputs.date }}
+          COMMITS:    ${{ steps.collect.outputs.commits }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: |
+          python3 << 'PYEOF'
+          import re, os
 
-    - name: Update README with release notes
-      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-      env:
-        VERSION: ${{ steps.version.outputs.version }}
-        DATE: ${{ steps.release_notes.outputs.date }}
-        COMMITS: ${{ steps.release_notes.outputs.commits }}
-        IMAGE_NAME: ${{ env.IMAGE_NAME }}
-      run: |
-        # Use Python to safely handle multiline content and special characters
-        python3 << 'PYEOF'
-        import re, os
+          version = os.environ['VERSION']
+          date    = os.environ['DATE']
+          commits = os.environ['COMMITS']
+          image   = os.environ['IMAGE_NAME']
 
-        version = os.environ['VERSION']
-        date    = os.environ['DATE']
-        commits = os.environ['COMMITS']
-        image   = os.environ['IMAGE_NAME']
+          block = (
+              f"<!-- RELEASE_NOTES_START -->\n"
+              f"### {version} — {date}\n\n"
+              f"**Changes since last release:**\n"
+              f"{commits}\n\n"
+              f"**Docker Image:** `{image}:{version}`\n"
+              f"<!-- RELEASE_NOTES_END -->"
+          )
 
-        block = (
-            f"<!-- RELEASE_NOTES_START -->\n"
-            f"### {version} — {date}\n\n"
-            f"**Changes since last release:**\n"
-            f"{commits}\n\n"
-            f"**Docker Image:** `{image}:{version}`\n"
-            f"<!-- RELEASE_NOTES_END -->"
-        )
+          with open('README.md', 'r') as f:
+              content = f.read()
 
-        with open('README.md', 'r') as f:
-            content = f.read()
+          updated = re.sub(
+              r'<!-- RELEASE_NOTES_START -->.*?<!-- RELEASE_NOTES_END -->',
+              block,
+              content,
+              flags=re.DOTALL
+          )
 
-        updated = re.sub(
-            r'<!-- RELEASE_NOTES_START -->.*?<!-- RELEASE_NOTES_END -->',
-            block,
-            content,
-            flags=re.DOTALL
-        )
+          with open('README.md', 'w') as f:
+              f.write(updated)
 
-        with open('README.md', 'w') as f:
-            f.write(updated)
+          print(f'✅ README updated for {version}')
+          PYEOF
+          tail -20 README.md
 
-        print(f'Updated README.md with release notes for {version}')
-        PYEOF
+      - name: Commit and push README
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git diff --cached --quiet && echo "No README changes" || {
+            git commit -m "docs: update release notes for ${{ needs.setup.outputs.version }} [skip ci]"
+            git push
+          }
 
-        tail -20 README.md
+  # ── 6. [RELEASE] GITHUB PACKAGE ──────────────────────────────────────────────
+  release-package:
+    name: 📦 [Release] GitHub Package
+    runs-on: ubuntu-latest
+    needs: [setup, release-notes]
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.setup.outputs.version }}
+          name: Release ${{ needs.setup.outputs.version }}
+          body: |
+            ## YAML Validator ${{ needs.setup.outputs.version }}
 
-    - name: Commit and push README
-      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add README.md
-        git diff --cached --quiet && echo "No README changes to commit" || {
-          git commit -m "docs: update release notes for ${{ steps.version.outputs.version }} [skip ci]"
-          git push
-        }
-        
-    - name: Create GitHub Release
-      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ steps.version.outputs.version }}
-        name: Release ${{ steps.version.outputs.version }}
-        body: |
-          ## YAML Validator Release ${{ steps.version.outputs.version }}
-          
-          ### Docker Images
-          - `${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}`
-          - `${{ env.IMAGE_NAME }}:latest`
-          
-          ### Changes
-          ${{ steps.release_notes.outputs.commits }}
-          
-          ### Features
-          - YAML syntax validation
-          - Linting with yamllint
-          - Security scanning with Checkov
-          - Multi-file & directory scanning
-          - Cross-platform Docker support (amd64/arm64)
-          
-          ### Usage
-          ```bash
-          # Quick install
-          echo 'alias ytest='\''docker run --rm -v "$(pwd):/data" ${{ env.IMAGE_NAME }}'\''' >> ~/.bashrc && source ~/.bashrc
+            ### Docker Images
+            - `${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.version }}`
+            - `${{ env.IMAGE_NAME }}:latest`
 
-          # Single file
-          ytest your_file.yaml
+            ### Changes
+            ${{ needs.release-notes.outputs.commits }}
 
-          # Multiple files
-          ytest file1.yaml file2.yaml
+            ### Features
+            - YAML syntax validation
+            - Linting with yamllint
+            - Security scanning with Checkov
+            - Multi-file & directory scanning
+            - Cross-platform (amd64/arm64)
 
-          # Entire directory
-          ytest ./configs/
-          ```
-        draft: false
-        prerelease: false
-        token: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: Summary
-      run: |
-        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
-        echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Image**: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Latest**: ${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
-        echo "- **Platforms**: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
-        echo "- **Tests**: Passed ✅" >> $GITHUB_STEP_SUMMARY
-        if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-          echo "- **Status**: Pushed to Docker Hub 🚀" >> $GITHUB_STEP_SUMMARY
-          echo "- **Release**: Created on GitHub 📦" >> $GITHUB_STEP_SUMMARY
-          echo "- **README**: Updated with release notes 📝" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "- **Status**: Build & test only (push on schedule/manual) 🧪" >> $GITHUB_STEP_SUMMARY
-        fi
+            ### Quick Start
+            ```bash
+            # One-time install
+            echo 'alias ytest="docker run --rm -v \"$(pwd):/data\" ${{ env.IMAGE_NAME }}"' >> ~/.bashrc && source ~/.bashrc
+
+            ytest myfile.yaml       # single file
+            ytest ./configs/        # entire directory
+            ytest a.yaml b.yaml     # multiple files
+            ```
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── 7. SUMMARY ───────────────────────────────────────────────────────────────
+  summary:
+    name: 📊 Summary
+    runs-on: ubuntu-latest
+    needs: [setup, build, test, release-image, release-notes, release-package]
+    if: always()
+    steps:
+      - name: Write job summary
+        run: |
+          echo "## 🐳 YAML Validator Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|:---:|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔧 Setup | ${{ needs.setup.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🐳 Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🧪 Test  | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🚀 Push Image | ${{ needs.release-image.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📝 Release Notes | ${{ needs.release-notes.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📦 GitHub Package | ${{ needs.release-package.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${{ needs.setup.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
