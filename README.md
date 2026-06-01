@@ -98,5 +98,16 @@ Issues are grouped by severity (**Critical → High → Medium → Low**) with c
 ## Release Notes
 
 <!-- RELEASE_NOTES_START -->
-_Release notes are automatically updated on each monthly release._
+### v3.0.0-20260601 — 2026-06-01
+
+**Changes since last release:**
+* fix: fix release notes - use git describe for tag detection and Python for README update (ee13d65)
+* docs: add notice that multi-file feature is coming in v3 (0da00c3)
+* ci: switch versioning to v3.x.0-YYYYMMDD format (5e8e256)
+* docs: restructure README, simplify install, and add release notes marker (da73953)
+* ci: pipeline improvements, multi-arch build, and release notes auto-update (97679f2)
+* feat: multi-file and directory support (124a40d)
+* chore: add .gitignore and .dockerignore (fa828af)
+
+**Docker Image:** `pooyanazad/yaml-checker:v3.0.0-20260601`
 <!-- RELEASE_NOTES_END -->
