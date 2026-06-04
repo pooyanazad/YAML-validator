@@ -113,36 +113,64 @@ jobs:
       - name: Load Docker image
         run: docker load < image.tar.gz
 
-      - name: Single clean file
+      - name: "✅ Clean file — must exit 0"
         run: |
           docker run --rm -v "${{ github.workspace }}:/data" \
             ${{ env.TEST_IMAGE }} /data/tests/test3_clean.yaml
+          echo "PASS: Clean file exited 0"
 
-      - name: Single file with issues
+      - name: "❌ File with syntax errors — must exit 1"
         run: |
-          docker run --rm -v "${{ github.workspace }}:/data" \
-            ${{ env.TEST_IMAGE }} /data/tests/test1_issues.yaml || true
+          if docker run --rm -v "${{ github.workspace }}:/data" \
+            ${{ env.TEST_IMAGE }} /data/tests/test1_issues.yaml; then
+            echo "FAIL: Expected exit 1 for file with critical issues, got 0"
+            exit 1
+          fi
+          echo "PASS: Correctly exited 1 for problematic file"
 
-      - name: Security scan
+      - name: "🔒 Security scan — must detect HIGH/CRITICAL issues"
         run: |
-          docker run --rm -v "${{ github.workspace }}:/data" \
-            ${{ env.TEST_IMAGE }} /data/tests/security_test1.yaml || true
+          OUTPUT=$(docker run --rm -v "${{ github.workspace }}:/data" \
+            ${{ env.TEST_IMAGE }} /data/tests/security_test1.yaml 2>&1 || true)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -qiE "HIGH|CRITICAL|checkov" \
+            && echo "PASS: Security issues detected" \
+            || { echo "FAIL: No security issues found in output"; exit 1; }
 
-      - name: Multi-file scan
+      - name: "📂 Multi-file — must show combined report"
         run: |
-          docker run --rm -v "${{ github.workspace }}:/data" \
+          OUTPUT=$(docker run --rm -v "${{ github.workspace }}:/data" \
             ${{ env.TEST_IMAGE }} \
-            /data/tests/test3_clean.yaml /data/tests/test1_issues.yaml || true
+            /data/tests/test3_clean.yaml /data/tests/test1_issues.yaml 2>&1 || true)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "Files scanned: 2" \
+            && echo "PASS: Combined report with 2 files shown" \
+            || { echo "FAIL: Expected 'Files scanned: 2' in output"; exit 1; }
 
-      - name: Directory scan
+      - name: "📁 Directory scan — must scan all YAML files"
         run: |
-          docker run --rm -v "${{ github.workspace }}:/data" \
-            ${{ env.TEST_IMAGE }} /data/tests/ || true
+          OUTPUT=$(docker run --rm -v "${{ github.workspace }}:/data" \
+            ${{ env.TEST_IMAGE }} /data/tests/ 2>&1 || true)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "Files scanned:" \
+            && echo "PASS: Directory scan ran" \
+            || { echo "FAIL: Expected 'Files scanned:' in output"; exit 1; }
 
-      - name: Flags — help and version
+      - name: "--help — must print usage"
         run: |
-          docker run --rm ${{ env.TEST_IMAGE }} --help
-          docker run --rm ${{ env.TEST_IMAGE }} --version
+          OUTPUT=$(docker run --rm ${{ env.TEST_IMAGE }} --help)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -qi "usage\|FILE" \
+            && echo "PASS: --help output is valid" \
+            || { echo "FAIL: --help output unexpected"; exit 1; }
+
+      - name: "--version — must print version number"
+        run: |
+          OUTPUT=$(docker run --rm ${{ env.TEST_IMAGE }} --version)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "yaml-validator" \
+            && echo "PASS: --version output is valid" \
+            || { echo "FAIL: --version output unexpected"; exit 1; }
 
   # ── 4. [RELEASE] PUSH DOCKER IMAGE ───────────────────────────────────────────
   release-image:
