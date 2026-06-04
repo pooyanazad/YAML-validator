@@ -96,11 +96,75 @@ jobs:
           path: image.tar.gz
           retention-days: 1
 
-  # ── 3. TEST ──────────────────────────────────────────────────────────────────
-  test:
-    name: 🧪 Test
+  # ── 3. APP TESTS ─────────────────────────────────────────────────────────────
+  app-tests:
+    name: 🔬 App Tests
     runs-on: ubuntu-latest
     needs: build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install --quiet -r requirements.txt -r requirements-test.txt
+
+      - name: Run pytest with report
+        run: |
+          python -m pytest tests/test_app.py -v \
+            --junit-xml=test-results.xml \
+            --json-report --json-report-file=test-report.json \
+            2>&1 | tee pytest-output.txt
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-test-report
+          path: |
+            test-results.xml
+            test-report.json
+            pytest-output.txt
+          retention-days: 30
+
+      - name: Print test summary
+        if: always()
+        run: |
+          echo "## 🔬 App Test Results" >> $GITHUB_STEP_SUMMARY
+          python3 -c "
+          import json, sys
+          try:
+              with open('test-report.json') as f:
+                  r = json.load(f)
+              s = r.get('summary', {})
+              passed  = s.get('passed', 0)
+              failed  = s.get('failed', 0)
+              total   = s.get('total', 0)
+              duration = round(r.get('duration', 0), 2)
+              print(f'| Total | Passed | Failed | Duration |')
+              print(f'|---|---|---|---|')
+              icon = '✅' if failed == 0 else '❌'
+              print(f'| {total} | {passed} | {failed} | {duration}s |')
+              if failed > 0:
+                  print('')
+                  print('### ❌ Failed Tests')
+                  for t in r.get('tests', []):
+                      if t.get('outcome') == 'failed':
+                          print(f'- {t[\"nodeid\"]}')
+          except Exception as e:
+              print(f'Could not parse report: {e}')
+          " >> $GITHUB_STEP_SUMMARY
+
+  # ── 4. DOCKER INTEGRATION TESTS ──────────────────────────────────────────────
+  test:
+    name: 🧪 Docker Integration Tests
+    runs-on: ubuntu-latest
+    needs: [build, app-tests]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -176,7 +240,7 @@ jobs:
   release-image:
     name: 🚀 [Release] Push Docker Image
     runs-on: ubuntu-latest
-    needs: [setup, test]
+    needs: [setup, app-tests, test]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
@@ -346,7 +410,7 @@ jobs:
   summary:
     name: 📊 Summary
     runs-on: ubuntu-latest
-    needs: [setup, build, test, release-image, release-notes, release-package]
+    needs: [setup, build, app-tests, test, release-image, release-notes, release-package]
     if: always()
     steps:
       - name: Write job summary
@@ -357,7 +421,8 @@ jobs:
           echo "|---|:---:|" >> $GITHUB_STEP_SUMMARY
           echo "| 🔧 Setup | ${{ needs.setup.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🐳 Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🧪 Test  | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔬 App Tests | ${{ needs.app-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🧪 Docker Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🚀 Push Image | ${{ needs.release-image.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 📝 Release Notes | ${{ needs.release-notes.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 📦 GitHub Package | ${{ needs.release-package.result }} |" >> $GITHUB_STEP_SUMMARY
