@@ -21,6 +21,7 @@ from app import (
     ValidationIssue,
     ValidationResult,
     Severity,
+    ToolAvailability,
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
