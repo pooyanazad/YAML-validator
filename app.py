@@ -37,7 +37,6 @@ except ImportError:
         RESET_ALL = ''
 
 # ===== CONFIGURATION & CONSTANTS =====
-CHECKOV_AVAILABLE = True
 PYTHON_EXECUTABLE = sys.executable
 
 class Severity(Enum):
@@ -73,6 +72,12 @@ class ValidationResult:
     issues: List[ValidationIssue]
     summary: Dict[str, int]
 
+@dataclass
+class ToolAvailability:
+    """Tracks which external tools are available on the system."""
+    yamllint: bool = True
+    checkov: bool = True
+
 # ===== UTILITY FUNCTIONS =====
 def print_colored(text: str, severity: Severity = None, bold: bool = False):
     """Print text with color based on severity"""
@@ -80,29 +85,31 @@ def print_colored(text: str, severity: Severity = None, bold: bool = False):
     style = Style.BRIGHT if bold else ''
     print(f"{color}{style}{text}{Style.RESET_ALL}")
 
-def check_dependencies():
-    """Check if required tools are installed"""
+def check_dependencies() -> ToolAvailability:
+    """Check if required tools are installed and return their availability."""
     missing_tools = []
-    global CHECKOV_AVAILABLE
-    CHECKOV_AVAILABLE = True
+    tools = ToolAvailability()
     
     # Check yamllint
     try:
         subprocess.run([PYTHON_EXECUTABLE, '-m', 'yamllint', '--version'], capture_output=True, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
+        tools.yamllint = False
         missing_tools.append('yamllint')
     
     # Check checkov (optional)
     try:
         subprocess.run([PYTHON_EXECUTABLE, '-c', 'import checkov'], capture_output=True, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
-        CHECKOV_AVAILABLE = False
+        tools.checkov = False
         print_colored("Warning: checkov not available, security checks will be skipped", Severity.MEDIUM)
     
     if missing_tools:
         print_colored(f"Missing required tools: {', '.join(missing_tools)}", Severity.CRITICAL, bold=True)
         print_colored("Install with: python3 -m pip install yamllint checkov", Severity.INFO)
         sys.exit(1)
+    
+    return tools
 
 def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
     """Validate YAML syntax"""
@@ -247,8 +254,10 @@ def run_checkov(file_path: str) -> List[ValidationIssue]:
     return issues
 
 # ===== CORE BUSINESS LOGIC =====
-def validate_yaml_file(file_path: str) -> ValidationResult:
+def validate_yaml_file(file_path: str, tools: ToolAvailability = None) -> ValidationResult:
     """Validate a YAML file using all available tools"""
+    if tools is None:
+        tools = ToolAvailability()
     print_colored(f"\n🔍 Validating: {file_path}", Severity.INFO, bold=True)
     print_colored("=" * 60, Severity.INFO)
     
@@ -277,7 +286,7 @@ def validate_yaml_file(file_path: str) -> ValidationResult:
         print_colored("✅ No linting issues found", Severity.INFO)
     
     # 3. Run checkov (if available)
-    if CHECKOV_AVAILABLE:
+    if tools.checkov:
         print_colored("\n🔒 Running security checks (checkov)...", Severity.INFO)
         checkov_issues = run_checkov(file_path)
         all_issues.extend(checkov_issues)
@@ -432,7 +441,7 @@ def main():
         sys.exit(1)
 
     # Check dependencies
-    check_dependencies()
+    tools = check_dependencies()
 
     # Validate all files
     results = []
@@ -440,7 +449,7 @@ def main():
     total_issues = 0
 
     for yaml_file in yaml_files:
-        result = validate_yaml_file(yaml_file)
+        result = validate_yaml_file(yaml_file, tools)
         results.append(result)
 
         # Print detailed issues per file
