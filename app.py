@@ -12,6 +12,7 @@ import json
 import glob
 import argparse
 import yaml
+import re
 from pathlib import Path
 from typing import Dict, List, Any
 from dataclasses import dataclass
@@ -145,6 +146,7 @@ def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
 def run_yamllint(file_path: str) -> List[ValidationIssue]:
     """Run yamllint and parse results"""
     issues = []
+    pattern = re.compile(r"^(.+?):(\d+):(\d+): \[([^\]]+)\] (.+?)(?: \(([^)]+)\))?$")
     try:
         result = subprocess.run(
             [PYTHON_EXECUTABLE, '-m', 'yamllint', '-f', 'parsable', file_path],
@@ -154,30 +156,26 @@ def run_yamllint(file_path: str) -> List[ValidationIssue]:
         
         for line in result.stdout.strip().split('\n'):
             if line.strip():
-                parts = line.split(':')
-                if len(parts) >= 4:
-                    line_num = int(parts[1]) if parts[1].isdigit() else None
-                    column_num = int(parts[2]) if parts[2].isdigit() else None
-                    # Rejoin everything after file:line:col: and parse [level] message
-                    rest = ':'.join(parts[3:]).strip()
-                    # Format is "[level] message" — extract level from brackets
-                    if rest.startswith('['):
-                        bracket_end = rest.index(']')
-                        level = rest[1:bracket_end]
-                        message = rest[bracket_end + 1:].strip()
-                    else:
-                        level = rest
-                        message = ''
-                    
+                match = pattern.match(line)
+                if match:
+                    parsed_file, line_num, col_num, level, message, rule = match.groups()
                     severity = Severity.MEDIUM if level == 'error' else Severity.LOW
                     
                     issues.append(ValidationIssue(
                         tool="yamllint",
                         severity=severity,
-                        message=message,
-                        line=line_num,
-                        column=column_num,
-                        rule=level,
+                        message=message.strip(),
+                        line=int(line_num),
+                        column=int(col_num),
+                        rule=rule or level,
+                        file_path=file_path
+                    ))
+                else:
+                    # Fallback for unexpected format
+                    issues.append(ValidationIssue(
+                        tool="yamllint",
+                        severity=Severity.MEDIUM,
+                        message=line.strip(),
                         file_path=file_path
                     ))
     
