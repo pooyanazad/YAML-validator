@@ -93,15 +93,15 @@ def check_dependencies() -> ToolAvailability:
     
     # Check yamllint
     try:
-        subprocess.run([PYTHON_EXECUTABLE, '-m', 'yamllint', '--version'], capture_output=True, check=True)
-    except (subprocess.CalledProcessError, FileNotFoundError):
+        subprocess.run([PYTHON_EXECUTABLE, '-m', 'yamllint', '--version'], capture_output=True, check=True, timeout=30)
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         tools.yamllint = False
         missing_tools.append('yamllint')
     
     # Check checkov (optional)
     try:
-        subprocess.run([PYTHON_EXECUTABLE, '-c', 'import checkov'], capture_output=True, check=True)
-    except (subprocess.CalledProcessError, FileNotFoundError):
+        subprocess.run([PYTHON_EXECUTABLE, '-c', 'import checkov'], capture_output=True, check=True, timeout=30)
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         tools.checkov = False
         print_colored("Warning: checkov not available, security checks will be skipped", Severity.MEDIUM)
     
