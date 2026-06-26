@@ -144,6 +144,34 @@ class TestRunYamllint:
                 f"Stray ']' found in message: '{issue.message}'"
             )
 
+    @patch("subprocess.run")
+    def test_messages_with_colons_parsed_correctly(self, mock_run):
+        """Day 5: Verify that line, column, level, message (with colons) are correctly extracted."""
+        # Mock the stdout of a 'yamllint -f parsable' run
+        mock_stdout = (
+            "test_file.yaml:12:34: [error] Expected ':', but found '<block end>' (syntax)\n"
+            "test_file.yaml:56:78: [warning] Nested map: too many colons: yes (some-rule)\n"
+        )
+        mock_result = type("MockResult", (), {"stdout": mock_stdout, "returncode": 1})()
+        mock_run.return_value = mock_result
+
+        issues = run_yamllint("fake_path.yaml")
+        assert len(issues) == 2
+
+        # Issue 1
+        assert issues[0].line == 12
+        assert issues[0].column == 34
+        assert issues[0].rule == "syntax"
+        assert issues[0].severity == Severity.MEDIUM
+        assert issues[0].message == "Expected ':', but found '<block end>'"
+
+        # Issue 2
+        assert issues[1].line == 56
+        assert issues[1].column == 78
+        assert issues[1].rule == "some-rule"
+        assert issues[1].severity == Severity.LOW
+        assert issues[1].message == "Nested map: too many colons: yes"
+
     def test_trailing_spaces_detected(self):
         path = make_yaml("key: value   \n")
         try:
