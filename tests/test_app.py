@@ -199,7 +199,27 @@ class TestRunYamllint:
         assert len(issues) == 1
         assert issues[0].severity == Severity.MEDIUM
         assert issues[0].message == "Something completely unexpected went wrong"
+    @patch("subprocess.run")
+    def test_yamllint_timeout_handled_gracefully(self, mock_run):
+        """Day 10: Hanging subprocess triggers TimeoutExpired and graceful HIGH severity issue."""
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="yamllint", timeout=300)
+        issues = run_yamllint("fake_path.yaml", timeout=300)
+        
+        assert len(issues) == 1
+        assert issues[0].severity == Severity.HIGH
+        assert "timed out after 300 seconds" in issues[0].message
 
+class TestRunCheckov:
+    @patch("subprocess.run")
+    def test_checkov_timeout_handled_gracefully(self, mock_run):
+        """Day 10: Hanging subprocess triggers TimeoutExpired and graceful HIGH severity issue."""
+        # Need to import run_checkov if it's not imported at the top, but test_app.py imports it via `from app import *`
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="checkov", timeout=300)
+        issues = run_checkov("fake_path.yaml", timeout=300)
+        
+        assert len(issues) == 1
+        assert issues[0].severity == Severity.HIGH
+        assert "timed out after 300 seconds" in issues[0].message
     def test_trailing_spaces_detected(self):
         path = make_yaml("key: value   \n")
         try:
