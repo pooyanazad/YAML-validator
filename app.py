@@ -153,6 +153,16 @@ def run_yamllint(file_path: str) -> List[ValidationIssue]:
             capture_output=True,
             text=True
         )
+
+        if result.returncode != 0 and "No module named yamllint" in result.stderr:
+            issues.append(ValidationIssue(
+                tool="yamllint",
+                severity=Severity.HIGH,
+                message="yamllint is not installed or not available in the Python environment.",
+                file_path=file_path
+            ))
+            return issues
+        
         
         for line in result.stdout.strip().split('\n'):
             if line.strip():

@@ -172,6 +172,34 @@ class TestRunYamllint:
         assert issues[1].severity == Severity.LOW
         assert issues[1].message == "Nested map: too many colons: yes"
 
+    @patch("subprocess.run")
+    def test_yamllint_empty_output_handled_gracefully(self, mock_run):
+        """Day 6: Empty output gracefully results in 0 issues."""
+        mock_result = type("MockResult", (), {"stdout": "", "stderr": "", "returncode": 0})()
+        mock_run.return_value = mock_result
+        issues = run_yamllint("fake_path.yaml")
+        assert issues == []
+
+    @patch("subprocess.run")
+    def test_yamllint_not_installed_handled_gracefully(self, mock_run):
+        """Day 6: If yamllint is missing, report gracefully."""
+        mock_result = type("MockResult", (), {"stdout": "", "stderr": "/bin/python: No module named yamllint", "returncode": 1})()
+        mock_run.return_value = mock_result
+        issues = run_yamllint("fake_path.yaml")
+        assert len(issues) == 1
+        assert issues[0].severity == Severity.HIGH
+        assert "not installed" in issues[0].message
+
+    @patch("subprocess.run")
+    def test_yamllint_malformed_output_handled_gracefully(self, mock_run):
+        """Day 6: Unexpected format uses fallback."""
+        mock_result = type("MockResult", (), {"stdout": "Something completely unexpected went wrong", "stderr": "", "returncode": 1})()
+        mock_run.return_value = mock_result
+        issues = run_yamllint("fake_path.yaml")
+        assert len(issues) == 1
+        assert issues[0].severity == Severity.MEDIUM
+        assert issues[0].message == "Something completely unexpected went wrong"
+
     def test_trailing_spaces_detected(self):
         path = make_yaml("key: value   \n")
         try:
