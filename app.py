@@ -151,7 +151,8 @@ def run_yamllint(file_path: str) -> List[ValidationIssue]:
         result = subprocess.run(
             [PYTHON_EXECUTABLE, '-m', 'yamllint', '-f', 'parsable', file_path],
             capture_output=True,
-            text=True
+            text=True,
+            timeout=300
         )
 
         if result.returncode != 0 and "No module named yamllint" in result.stderr:
@@ -189,6 +190,13 @@ def run_yamllint(file_path: str) -> List[ValidationIssue]:
                         file_path=file_path
                     ))
     
+    except subprocess.TimeoutExpired:
+        issues.append(ValidationIssue(
+            tool="yamllint",
+            severity=Severity.HIGH,
+            message="yamllint execution timed out after 300 seconds.",
+            file_path=file_path
+        ))
     except Exception as e:
         issues.append(ValidationIssue(
             tool="yamllint",
@@ -206,7 +214,8 @@ def run_checkov(file_path: str) -> List[ValidationIssue]:
         result = subprocess.run(
             [PYTHON_EXECUTABLE, '-m', 'checkov.main', '-f', file_path, '--output', 'json'],
             capture_output=True,
-            text=True
+            text=True,
+            timeout=300
         )
         
         if result.stdout.strip():
@@ -251,6 +260,13 @@ def run_checkov(file_path: str) -> List[ValidationIssue]:
                     file_path=file_path
                 ))
     
+    except subprocess.TimeoutExpired:
+        issues.append(ValidationIssue(
+            tool="checkov",
+            severity=Severity.HIGH,
+            message="checkov execution timed out after 300 seconds.",
+            file_path=file_path
+        ))
     except Exception as e:
         issues.append(ValidationIssue(
             tool="checkov",
