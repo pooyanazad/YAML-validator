@@ -143,7 +143,7 @@ def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
     
     return issues
 
-def run_yamllint(file_path: str) -> List[ValidationIssue]:
+def run_yamllint(file_path: str, timeout: int = 300) -> List[ValidationIssue]:
     """Run yamllint and parse results"""
     issues = []
     pattern = re.compile(r"^(.+?):(\d+):(\d+): \[([^\]]+)\] (.+?)(?: \(([^)]+)\))?$")
@@ -152,7 +152,7 @@ def run_yamllint(file_path: str) -> List[ValidationIssue]:
             [PYTHON_EXECUTABLE, '-m', 'yamllint', '-f', 'parsable', file_path],
             capture_output=True,
             text=True,
-            timeout=300
+            timeout=timeout
         )
 
         if result.returncode != 0 and "No module named yamllint" in result.stderr:
@@ -194,7 +194,7 @@ def run_yamllint(file_path: str) -> List[ValidationIssue]:
         issues.append(ValidationIssue(
             tool="yamllint",
             severity=Severity.HIGH,
-            message="yamllint execution timed out after 300 seconds.",
+            message=f"yamllint execution timed out after {timeout} seconds.",
             file_path=file_path
         ))
     except Exception as e:
@@ -207,7 +207,7 @@ def run_yamllint(file_path: str) -> List[ValidationIssue]:
     
     return issues
 
-def run_checkov(file_path: str) -> List[ValidationIssue]:
+def run_checkov(file_path: str, timeout: int = 300) -> List[ValidationIssue]:
     """Run checkov and parse results"""
     issues = []
     try:
@@ -215,7 +215,7 @@ def run_checkov(file_path: str) -> List[ValidationIssue]:
             [PYTHON_EXECUTABLE, '-m', 'checkov.main', '-f', file_path, '--output', 'json'],
             capture_output=True,
             text=True,
-            timeout=300
+            timeout=timeout
         )
         
         if result.stdout.strip():
@@ -264,7 +264,7 @@ def run_checkov(file_path: str) -> List[ValidationIssue]:
         issues.append(ValidationIssue(
             tool="checkov",
             severity=Severity.HIGH,
-            message="checkov execution timed out after 300 seconds.",
+            message=f"checkov execution timed out after {timeout} seconds.",
             file_path=file_path
         ))
     except Exception as e:
@@ -278,7 +278,7 @@ def run_checkov(file_path: str) -> List[ValidationIssue]:
     return issues
 
 # ===== CORE BUSINESS LOGIC =====
-def validate_yaml_file(file_path: str, tools: ToolAvailability = None) -> ValidationResult:
+def validate_yaml_file(file_path: str, tools: ToolAvailability = None, timeout: int = 300) -> ValidationResult:
     """Validate a YAML file using all available tools"""
     if tools is None:
         tools = ToolAvailability()
@@ -301,7 +301,7 @@ def validate_yaml_file(file_path: str, tools: ToolAvailability = None) -> Valida
     
     # 2. Run yamllint
     print_colored("\n🔧 Running yamllint...", Severity.INFO)
-    yamllint_issues = run_yamllint(file_path)
+    yamllint_issues = run_yamllint(file_path, timeout=timeout)
     all_issues.extend(yamllint_issues)
     
     if yamllint_issues:
@@ -312,7 +312,7 @@ def validate_yaml_file(file_path: str, tools: ToolAvailability = None) -> Valida
     # 3. Run checkov (if available)
     if tools.checkov:
         print_colored("\n🔒 Running security checks (checkov)...", Severity.INFO)
-        checkov_issues = run_checkov(file_path)
+        checkov_issues = run_checkov(file_path, timeout=timeout)
         all_issues.extend(checkov_issues)
         
         if checkov_issues:
@@ -454,6 +454,10 @@ def main():
         '--version', action='version',
         version=f'%(prog)s {__version__}'
     )
+    parser.add_argument(
+        '--timeout', type=int, default=300,
+        help='Timeout in seconds for subprocess calls (default: 300)'
+    )
 
     args = parser.parse_args()
 
@@ -473,7 +477,7 @@ def main():
     total_issues = 0
 
     for yaml_file in yaml_files:
-        result = validate_yaml_file(yaml_file, tools)
+        result = validate_yaml_file(yaml_file, tools, timeout=args.timeout)
         results.append(result)
 
         # Print detailed issues per file
