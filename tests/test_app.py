@@ -152,7 +152,7 @@ class TestRunYamllint:
             "test_file.yaml:12:34: [error] Expected ':', but found '<block end>' (syntax)\n"
             "test_file.yaml:56:78: [warning] Nested map: too many colons: yes (some-rule)\n"
         )
-        mock_result = type("MockResult", (), {"stdout": mock_stdout, "returncode": 1})()
+        mock_result = type("MockResult", (), {"stdout": mock_stdout, "stderr": "", "returncode": 1})()
         mock_run.return_value = mock_result
 
         issues = run_yamllint("fake_path.yaml")
