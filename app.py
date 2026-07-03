@@ -123,7 +123,6 @@ def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
         line = getattr(e, 'problem_mark', None)
         line_num = line.line + 1 if line else None
         column_num = line.column + 1 if line else None
-        
         issues.append(ValidationIssue(
             tool="yaml",
             severity=Severity.CRITICAL,
@@ -133,7 +132,28 @@ def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
             rule="syntax",
             file_path=file_path
         ))
-    except Exception as e:
+    except FileNotFoundError:
+        issues.append(ValidationIssue(
+            tool="yaml",
+            severity=Severity.CRITICAL,
+            message=f"File not found: {file_path}",
+            file_path=file_path
+        ))
+    except PermissionError:
+        issues.append(ValidationIssue(
+            tool="yaml",
+            severity=Severity.CRITICAL,
+            message=f"Permission denied: {file_path}",
+            file_path=file_path
+        ))
+    except UnicodeDecodeError as e:
+        issues.append(ValidationIssue(
+            tool="yaml",
+            severity=Severity.CRITICAL,
+            message=f"File encoding error (not valid UTF-8): {str(e)}",
+            file_path=file_path
+        ))
+    except OSError as e:
         issues.append(ValidationIssue(
             tool="yaml",
             severity=Severity.CRITICAL,
