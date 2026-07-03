@@ -76,6 +76,19 @@ class TestValidateYamlSyntax:
         assert issues[0].severity == Severity.CRITICAL
         assert "File not found" in issues[0].message
 
+    def test_permission_denied_returns_critical_issue(self):
+        """Day 12: Unreadable file gives clear 'Permission denied' error."""
+        path = make_yaml("key: value\n")
+        try:
+            os.chmod(path, 0o000)  # Remove all permissions
+            issues = validate_yaml_syntax(path)
+            assert len(issues) == 1
+            assert issues[0].severity == Severity.CRITICAL
+            assert "Permission denied" in issues[0].message
+        finally:
+            os.chmod(path, 0o644)  # Restore so we can delete it
+            os.unlink(path)
+
     def test_inline_valid_yaml(self):
         path = make_yaml("key: value\nlist:\n  - a\n  - b\n")
         try:
