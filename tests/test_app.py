@@ -77,7 +77,7 @@ class TestValidateYamlSyntax:
         assert "File not found" in issues[0].message
 
     def test_permission_denied_returns_critical_issue(self):
-        """Day 12: Unreadable file gives clear 'Permission denied' error."""
+        """Unreadable file gives clear 'Permission denied' error."""
         path = make_yaml("key: value\n")
         try:
             os.chmod(path, 0o000)  # Remove all permissions
@@ -161,7 +161,7 @@ class TestRunYamllint:
 
     @patch("subprocess.run")
     def test_messages_with_colons_parsed_correctly(self, mock_run):
-        """Day 5: Verify that line, column, level, message (with colons) are correctly extracted."""
+        """Verify that line, column, level, message (with colons) are correctly extracted."""
         # Mock the stdout of a 'yamllint -f parsable' run
         mock_stdout = (
             "test_file.yaml:12:34: [error] Expected ':', but found '<block end>' (syntax)\n"
@@ -189,7 +189,7 @@ class TestRunYamllint:
 
     @patch("subprocess.run")
     def test_yamllint_empty_output_handled_gracefully(self, mock_run):
-        """Day 6: Empty output gracefully results in 0 issues."""
+        """Empty output gracefully results in 0 issues."""
         mock_result = type("MockResult", (), {"stdout": "", "stderr": "", "returncode": 0})()
         mock_run.return_value = mock_result
         issues = run_yamllint("fake_path.yaml")
@@ -197,7 +197,7 @@ class TestRunYamllint:
 
     @patch("subprocess.run")
     def test_yamllint_not_installed_handled_gracefully(self, mock_run):
-        """Day 6: If yamllint is missing, report gracefully."""
+        """If yamllint is missing, report gracefully."""
         mock_result = type("MockResult", (), {"stdout": "", "stderr": "/bin/python: No module named yamllint", "returncode": 1})()
         mock_run.return_value = mock_result
         issues = run_yamllint("fake_path.yaml")
@@ -207,7 +207,7 @@ class TestRunYamllint:
 
     @patch("subprocess.run")
     def test_yamllint_malformed_output_handled_gracefully(self, mock_run):
-        """Day 6: Unexpected format uses fallback."""
+        """Unexpected format uses fallback."""
         mock_result = type("MockResult", (), {"stdout": "Something completely unexpected went wrong", "stderr": "", "returncode": 1})()
         mock_run.return_value = mock_result
         issues = run_yamllint("fake_path.yaml")
@@ -216,7 +216,7 @@ class TestRunYamllint:
         assert issues[0].message == "Something completely unexpected went wrong"
     @patch("subprocess.run")
     def test_yamllint_timeout_handled_gracefully(self, mock_run):
-        """Day 10: Hanging subprocess triggers TimeoutExpired and graceful HIGH severity issue."""
+        """Hanging subprocess triggers TimeoutExpired and graceful HIGH severity issue."""
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="yamllint", timeout=300)
         issues = run_yamllint("fake_path.yaml", timeout=300)
         
@@ -227,7 +227,7 @@ class TestRunYamllint:
 class TestRunCheckov:
     @patch("subprocess.run")
     def test_checkov_timeout_handled_gracefully(self, mock_run):
-        """Day 10: Hanging subprocess triggers TimeoutExpired and graceful HIGH severity issue."""
+        """Hanging subprocess triggers TimeoutExpired and graceful HIGH severity issue."""
         # Need to import run_checkov if it's not imported at the top, but test_app.py imports it via `from app import *`
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="checkov", timeout=300)
         issues = run_checkov("fake_path.yaml", timeout=300)

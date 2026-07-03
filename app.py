@@ -116,7 +116,7 @@ def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
     """Validate YAML syntax"""
     issues = []
 
-    # Day 12: Check file existence and read permission before opening
+    # Check file existence and read permission before opening
     import os as _os
     if not _os.path.exists(file_path):
         return [ValidationIssue(
