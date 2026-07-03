@@ -8,6 +8,7 @@ import os
 import pytest
 import tempfile
 from pathlib import Path
+import subprocess
 from unittest.mock import patch
 
 # Make app importable from project root
@@ -17,6 +18,7 @@ import app as validator
 from app import (
     validate_yaml_syntax,
     run_yamllint,
+    run_checkov,
     resolve_files,
     validate_yaml_file,
     check_dependencies,
@@ -72,7 +74,7 @@ class TestValidateYamlSyntax:
         issues = validate_yaml_syntax("/nonexistent/path/file.yaml")
         assert len(issues) == 1
         assert issues[0].severity == Severity.CRITICAL
-        assert "File reading error" in issues[0].message
+        assert "File not found" in issues[0].message
 
     def test_inline_valid_yaml(self):
         path = make_yaml("key: value\nlist:\n  - a\n  - b\n")
