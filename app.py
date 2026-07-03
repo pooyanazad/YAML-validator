@@ -115,6 +115,24 @@ def check_dependencies() -> ToolAvailability:
 def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
     """Validate YAML syntax"""
     issues = []
+
+    # Day 12: Check file existence and read permission before opening
+    import os as _os
+    if not _os.path.exists(file_path):
+        return [ValidationIssue(
+            tool="yaml",
+            severity=Severity.CRITICAL,
+            message=f"File not found: {file_path}",
+            file_path=file_path
+        )]
+    if not _os.access(file_path, _os.R_OK):
+        return [ValidationIssue(
+            tool="yaml",
+            severity=Severity.CRITICAL,
+            message=f"Permission denied: {file_path}",
+            file_path=file_path
+        )]
+
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             # Use safe_load_all to handle multiple documents
