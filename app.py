@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 __version__ = "2.1.0"
+FILE_SIZE_WARNING_THRESHOLD = 1 * 1024 * 1024 # 1 MB
 
 # ===== IMPORTS & DEPENDENCIES =====
 try:
@@ -316,12 +317,29 @@ def run_checkov(file_path: str, timeout: int = 300) -> List[ValidationIssue]:
     return issues
 
 # ===== CORE BUSINESS LOGIC =====
-def validate_yaml_file(file_path: str, tools: ToolAvailability = None, timeout: int = 300) -> ValidationResult:
+def validate_yaml_file(file_path: str, tools: ToolAvailability = None, timeout: int = 300, no_security: bool = False) -> ValidationResult:
     """Validate a YAML file using all available tools"""
     if tools is None:
         tools = ToolAvailability()
     print_colored(f"\n🔍 Validating: {file_path}", Severity.INFO, bold=True)
     print_colored("=" * 60, Severity.INFO)
+
+    # File Size Warning
+    try:
+        file_size = os.path.getsize(file_path)
+        if file_size > FILE_SIZE_WARNING_THRESHOLD:
+            size_mb = file_size / (1024 * 1024)
+            print_colored(
+                f"Warning: '{file_path}' is large ({size_mb:.1f} MB)."
+                "Validation may be slow. Use --no-security to skip security checks.",
+                Severity.MEDIUM
+            )
+    except OSError:
+        pass
+
+    # Skip checlov if --no-security flag is set
+    if no_security:
+        tools = ToolAvailability(yamllint=tools.yamllint, checkov=False)
     
     all_issues = []
     syntax_valid = True
@@ -496,6 +514,10 @@ def main():
         '--timeout', type=int, default=300,
         help='Timeout in seconds for subprocess calls (default: 300)'
     )
+    parser.add_argument(
+        '--no-security', action='store_true', default=False,
+        help='Skip security checks (checkov). Recommended for large files.'
+    )
 
     args = parser.parse_args()
 
@@ -515,7 +537,7 @@ def main():
     total_issues = 0
 
     for yaml_file in yaml_files:
-        result = validate_yaml_file(yaml_file, tools, timeout=args.timeout)
+        result = validate_yaml_file(yaml_file, tools, timeout=args.timeout, no_security=args.no_security())
         results.append(result)
 
         # Print detailed issues per file
