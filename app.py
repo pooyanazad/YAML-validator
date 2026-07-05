@@ -135,8 +135,28 @@ def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
 
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
-            # Use safe_load_all to handle multiple documents
-            list(yaml.safe_load_all(file))
+            content = file.read()
+
+        if not content.strip():
+            issues.append(ValidationIssue(
+                tool="yaml",
+                severity=Severity.INFO,
+                message="File is empty. Nothing to validate.",
+                rule="empty-file",
+                file_path=file_path
+            ))
+            return issues
+
+        documents = list(yaml.safe_load_all(content))
+        if documents == [None]:
+            issues.append(ValidationIssue(
+                tool="yaml",
+                severity=Severity.INFO,
+                message="File contains no YAML COntent (parsed as null).",
+                rule="empty-file",
+                file_path=file_path
+            ))
+
     except yaml.YAMLError as e:
         line = getattr(e, 'problem_mark', None)
         line_num = line.line + 1 if line else None
