@@ -134,9 +134,9 @@ def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
         )]
 
     try:
-        with open(file_path, 'r', encoding='utf-8') as file:
+        with open(file_path, 'r', encoding='utf-8-sig') as file:
             # Use safe_load_all to handle multiple documents
-            list(yaml.safe_load_all(file))
+            content = file.read().replace('\r\n', '\n').replace('\r', '\n')
     except yaml.YAMLError as e:
         line = getattr(e, 'problem_mark', None)
         line_num = line.line + 1 if line else None
