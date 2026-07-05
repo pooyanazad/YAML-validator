@@ -112,6 +112,15 @@ def check_dependencies() -> ToolAvailability:
     
     return tools
 
+def is_binary_file(file_path: str, sample_size: int = 8192) -> bool:
+    """Detect if a file is binary by checking for null bytes in the first sample."""
+    try:
+        with open(file_path, 'rb') as f:
+            chunk = f.read(sample_size)
+        return b'\x00' in chunk
+    except OSError:
+        return False
+
 def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
     """Validate YAML syntax"""
     issues = []
@@ -130,6 +139,15 @@ def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
             tool="yaml",
             severity=Severity.CRITICAL,
             message=f"Permission denied: {file_path}",
+            file_path=file_path
+        )]
+
+    if _is_binary_file(file_path):
+        return [ValidationIssue(
+            tool="yaml",
+            severity=Severity.MEDIUM,
+            message="File appears to be binary, not a valid YAML file. SKipping.",
+            rule="binary-file",
             file_path=file_path
         )]
 
