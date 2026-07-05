@@ -79,6 +79,25 @@ class ToolAvailability:
     yamllint: bool = True
     checkov: bool = True
 
+class DuplicateKeyLoader(yaml.SafeLoader):
+    """Custom YAML Loader that detects duplicate keys"""
+    def construct_mapping(self, node, deep=False):
+        keys = []
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in keys:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping", node.start_mark,
+                    f"found duplicate key: {key!r}", key_node.start_mark
+                )
+            keys.append(key)
+        return super().construct_mapping(node, deep=deep)
+
+DuplicateKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    DuplicateKeyLoader.construct_mapping
+)
+
 # ===== UTILITY FUNCTIONS =====
 def print_colored(text: str, severity: Severity = None, bold: bool = False):
     """Print text with color based on severity"""
@@ -179,6 +198,25 @@ def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
             file_path=file_path
         ))
     
+    return issues
+
+def check_duplicate_keys(file_path: str, content: str) -> List[ValidationIssue]:
+    """Check for duplicate keys in YAML content"""
+    issues = []
+    try:
+        list(yaml.load_all(content, Loader=DuplicateKeyLoader))
+    except yaml.constructor.ConstructorError as e:
+        issues.append(ValidationIssue(
+            tool="yaml",
+            Severity=Severity.MEDIUM,
+            message=f"Duplicate key detected: {e.problem.strip()}",
+            line=e.problem_mark.line + 1 if e.problem_mark else None,
+            column=e.problem_mark.column + 1 if e.problem_mark else None,
+            rule="duplicate-key",
+            file_path=file_path
+        ))
+    except yaml.YAMLError:
+        pass
     return issues
 
 def run_yamllint(file_path: str, timeout: int = 300) -> List[ValidationIssue]:
@@ -336,6 +374,15 @@ def validate_yaml_file(file_path: str, tools: ToolAvailability = None, timeout: 
         print_colored("❌ Syntax validation failed", Severity.CRITICAL)
     else:
         print_colored("✅ Syntax validation passed", Severity.INFO)
+
+        with open(file_path, 'r', encoding='utf-8-sig') as f:
+            content = f.read().replace('\r\n', '\n').replace('\r', '\n')
+        dup_issues = check_duplicate_keys(file_path, content)
+        if dup_issues:
+            all_issues.extend(dup_issues)
+            print(f"⚠️  Found {len(dup_issues)} duplicate key(s)", Severity.MEDIUM)
+        else:
+            print_colored("✅ No duplicate keys found", Severity.INFO)
     
     # 2. Run yamllint
     print_colored("\n🔧 Running yamllint...", Severity.INFO)
