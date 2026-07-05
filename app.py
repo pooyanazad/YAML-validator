@@ -134,7 +134,8 @@ def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
         )]
 
     try:
-        with open(file_path, 'r', encoding='utf-8') as file:
+        # utf-8-sig is built-in encoding that silently strips \xef\xbb\xbf BOM if present
+        with open(file_path, 'r', encoding='utf-8-sig') as file:
             # Use safe_load_all to handle multiple documents
             list(yaml.safe_load_all(file))
     except yaml.YAMLError as e:
