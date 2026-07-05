@@ -79,12 +79,12 @@ Issues are grouped by severity (**Critical → High → Medium → Low**) with c
 
 ## Features
 
-✅ Multi-file & directory scanning  
-✅ Glob pattern support (`**/*.yaml`)  
-✅ Cross-platform (Windows, Linux, macOS)  
-✅ Multi-arch Docker image (amd64/arm64)  
-✅ Colored severity-based reporting  
-✅ Zero configuration required  
+ Multi-file & directory scanning  
+ Glob pattern support (`**/*.yaml`)  
+ Cross-platform (Windows, Linux, macOS)  
+ Multi-arch Docker image (amd64/arm64)  
+ Colored severity-based reporting  
+ Zero configuration required  
 
 ## Docker Image
 
