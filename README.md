@@ -1,6 +1,6 @@
 # YAML Validator
 
-Validate YAML files for syntax errors, style issues, and security misconfigurations — all in one command.
+Validate YAML files for syntax errors, style issues, and security misconfigurations — all in the one command.
 
 <img width="881" height="571" alt="YAML Validator output" src="https://github.com/user-attachments/assets/0a3278f9-9f86-431c-90f7-e3d122f0043b" />
 
@@ -26,7 +26,7 @@ echo 'alias ytest="docker run --rm -v \"\$(pwd):/data\" pooyanazad/yaml-checker"
 
 </details>
 
-Now you can use `ytest` anywhere.
+Now you can use `ytest` anywhere where you want.
 
 ## Usage
 
