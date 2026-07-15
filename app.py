@@ -15,8 +15,6 @@ import yaml
 import re
 from pathlib import Path
 from typing import Dict, List, Any
-from dataclasses import dataclass
-from enum import Enum
 
 __version__ = "2.1.0"
 
@@ -40,44 +38,14 @@ except ImportError:
 # ===== CONFIGURATION & CONSTANTS =====
 PYTHON_EXECUTABLE = sys.executable
 
-class Severity(Enum):
-    CRITICAL = "CRITICAL"
-    HIGH = "HIGH"
-    MEDIUM = "MEDIUM"
-    LOW = "LOW"
-    INFO = "INFO"
-
-SEVERITY_COLORS = {
-    Severity.CRITICAL: Fore.RED + Style.BRIGHT,
-    Severity.HIGH: Fore.RED,
-    Severity.MEDIUM: Fore.YELLOW,
-    Severity.LOW: Fore.CYAN,
-    Severity.INFO: Fore.GREEN
-}
-
-# ===== TYPES & INTERFACES =====
-@dataclass
-class ValidationIssue:
-    tool: str
-    severity: Severity
-    message: str
-    line: int = None
-    column: int = None
-    rule: str = None
-    file_path: str = None
-
-@dataclass
-class ValidationResult:
-    file_path: str
-    syntax_valid: bool
-    issues: List[ValidationIssue]
-    summary: Dict[str, int]
-
-@dataclass
-class ToolAvailability:
-    """Tracks which external tools are available on the system."""
-    yamllint: bool = True
-    checkov: bool = True
+# ===== TYPES & INTERFACES (canonical home: yaml_validator/models.py) =====
+from yaml_validator.models import (  # noqa: E402
+    Severity,
+    SEVERITY_COLORS,
+    ValidationIssue,
+    ValidationResult,
+    ToolAvailability,
+)
 
 # ===== UTILITY FUNCTIONS =====
 def print_colored(text: str, severity: Severity = None, bold: bool = False):
