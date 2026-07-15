@@ -8,11 +8,8 @@ Usage: python3 app.py ./conf.yaml
 import sys
 import os
 import subprocess
-import json
 import glob
 import argparse
-import yaml
-import re
 from pathlib import Path
 from typing import Dict, List, Any
 
@@ -30,7 +27,7 @@ except ImportError:
         GREEN = ''
         CYAN = ''
         WHITE = ''
-    
+
     class Style:
         BRIGHT = ''
         RESET_ALL = ''
@@ -47,365 +44,59 @@ from yaml_validator.models import (  # noqa: E402
     ToolAvailability,
 )
 
-# ===== UTILITY FUNCTIONS =====
-def print_colored(text: str, severity: Severity = None, bold: bool = False):
-    """Print text with color based on severity"""
-    color = SEVERITY_COLORS.get(severity, Fore.WHITE)
-    style = Style.BRIGHT if bold else ''
-    print(f"{color}{style}{text}{Style.RESET_ALL}")
+# ===== VALIDATORS (canonical home: yaml_validator/validators.py) =====
+from yaml_validator.validators import (  # noqa: E402
+    validate_yaml_syntax,
+    run_yamllint,
+    run_checkov,
+    validate_yaml_file,
+)
 
+# ===== OUTPUT HELPERS (canonical home: yaml_validator/output.py) =====
+from yaml_validator.output import (  # noqa: E402
+    print_colored,
+    print_issues,
+    print_summary_table,
+)
+
+
+# ===== DEPENDENCY CHECK =====
 def check_dependencies() -> ToolAvailability:
     """Check if required tools are installed and return their availability."""
     missing_tools = []
     tools = ToolAvailability()
-    
+
     # Check yamllint
     try:
-        subprocess.run([PYTHON_EXECUTABLE, '-m', 'yamllint', '--version'], capture_output=True, check=True, timeout=30)
+        subprocess.run(
+            [PYTHON_EXECUTABLE, '-m', 'yamllint', '--version'],
+            capture_output=True, check=True, timeout=30,
+        )
     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         tools.yamllint = False
         missing_tools.append('yamllint')
-    
+
     # Check checkov (optional)
     try:
-        subprocess.run([PYTHON_EXECUTABLE, '-c', 'import checkov'], capture_output=True, check=True, timeout=30)
+        subprocess.run(
+            [PYTHON_EXECUTABLE, '-c', 'import checkov'],
+            capture_output=True, check=True, timeout=30,
+        )
     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         tools.checkov = False
         print_colored("Warning: checkov not available, security checks will be skipped", Severity.MEDIUM)
-    
+
     if missing_tools:
         print_colored(f"Missing required tools: {', '.join(missing_tools)}", Severity.CRITICAL, bold=True)
         print_colored("Install with: python3 -m pip install yamllint checkov", Severity.INFO)
         sys.exit(1)
-    
+
     return tools
 
-def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
-    """Validate YAML syntax"""
-    issues = []
-
-    # Check file existence and read permission before opening
-    import os as _os
-    if not _os.path.exists(file_path):
-        return [ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=f"File not found: {file_path}",
-            file_path=file_path
-        )]
-    if not _os.access(file_path, _os.R_OK):
-        return [ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=f"Permission denied: {file_path}",
-            file_path=file_path
-        )]
-
-    try:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            # Use safe_load_all to handle multiple documents
-            list(yaml.safe_load_all(file))
-    except yaml.YAMLError as e:
-        line = getattr(e, 'problem_mark', None)
-        line_num = line.line + 1 if line else None
-        column_num = line.column + 1 if line else None
-        issues.append(ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=str(e),
-            line=line_num,
-            column=column_num,
-            rule="syntax",
-            file_path=file_path
-        ))
-    except FileNotFoundError:
-        issues.append(ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=f"File not found: {file_path}",
-            file_path=file_path
-        ))
-    except PermissionError:
-        issues.append(ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=f"Permission denied: {file_path}",
-            file_path=file_path
-        ))
-    except UnicodeDecodeError as e:
-        issues.append(ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=f"File encoding error (not valid UTF-8): {str(e)}",
-            file_path=file_path
-        ))
-    except OSError as e:
-        issues.append(ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=f"File reading error: {str(e)}",
-            file_path=file_path
-        ))
-    
-    return issues
-
-def run_yamllint(file_path: str, timeout: int = 300) -> List[ValidationIssue]:
-    """Run yamllint and parse results"""
-    issues = []
-    pattern = re.compile(r"^(.+?):(\d+):(\d+): \[([^\]]+)\] (.+?)(?: \(([^)]+)\))?$")
-    try:
-        result = subprocess.run(
-            [PYTHON_EXECUTABLE, '-m', 'yamllint', '-f', 'parsable', file_path],
-            capture_output=True,
-            text=True,
-            timeout=timeout
-        )
-
-        if result.returncode != 0 and "No module named yamllint" in result.stderr:
-            issues.append(ValidationIssue(
-                tool="yamllint",
-                severity=Severity.HIGH,
-                message="yamllint is not installed or not available in the Python environment.",
-                file_path=file_path
-            ))
-            return issues
-        
-        
-        for line in result.stdout.strip().split('\n'):
-            if line.strip():
-                match = pattern.match(line)
-                if match:
-                    parsed_file, line_num, col_num, level, message, rule = match.groups()
-                    severity = Severity.MEDIUM if level == 'error' else Severity.LOW
-                    
-                    issues.append(ValidationIssue(
-                        tool="yamllint",
-                        severity=severity,
-                        message=message.strip(),
-                        line=int(line_num),
-                        column=int(col_num),
-                        rule=rule or level,
-                        file_path=file_path
-                    ))
-                else:
-                    # Fallback for unexpected format
-                    issues.append(ValidationIssue(
-                        tool="yamllint",
-                        severity=Severity.MEDIUM,
-                        message=line.strip(),
-                        file_path=file_path
-                    ))
-    
-    except subprocess.TimeoutExpired:
-        issues.append(ValidationIssue(
-            tool="yamllint",
-            severity=Severity.HIGH,
-            message=f"yamllint execution timed out after {timeout} seconds.",
-            file_path=file_path
-        ))
-    except Exception as e:
-        issues.append(ValidationIssue(
-            tool="yamllint",
-            severity=Severity.HIGH,
-            message=f"yamllint execution failed: {str(e)}",
-            file_path=file_path
-        ))
-    
-    return issues
-
-def run_checkov(file_path: str, timeout: int = 300) -> List[ValidationIssue]:
-    """Run checkov and parse results"""
-    issues = []
-    try:
-        result = subprocess.run(
-            [PYTHON_EXECUTABLE, '-m', 'checkov.main', '-f', file_path, '--output', 'json'],
-            capture_output=True,
-            text=True,
-            timeout=timeout
-        )
-        
-        if result.stdout.strip():
-            try:
-                data = json.loads(result.stdout)
-                
-                # Parse failed checks
-                for check in data.get('results', {}).get('failed_checks', []):
-                    # Map checkov severity or default to HIGH for security issues
-                    severity = Severity.HIGH
-                    if check.get('severity'):
-                        severity_map = {
-                            'CRITICAL': Severity.CRITICAL,
-                            'HIGH': Severity.HIGH,
-                            'MEDIUM': Severity.MEDIUM,
-                            'LOW': Severity.LOW
-                        }
-                        severity = severity_map.get(
-                            check.get('severity', 'HIGH').upper(),
-                            Severity.HIGH
-                        )
-                    
-                    # Get line number from file_line_range
-                    line_num = None
-                    if check.get('file_line_range') and len(check['file_line_range']) > 0:
-                        line_num = check['file_line_range'][0]
-                    
-                    issues.append(ValidationIssue(
-                        tool="checkov",
-                        severity=severity,
-                        message=check.get('check_name', 'Security check failed'),
-                        line=line_num,
-                        rule=check.get('check_id', ''),
-                        file_path=file_path
-                    ))
-            
-            except json.JSONDecodeError as e:
-                issues.append(ValidationIssue(
-                    tool="checkov",
-                    severity=Severity.MEDIUM,
-                    message=f"Failed to parse checkov output: {str(e)}",
-                    file_path=file_path
-                ))
-    
-    except subprocess.TimeoutExpired:
-        issues.append(ValidationIssue(
-            tool="checkov",
-            severity=Severity.HIGH,
-            message=f"checkov execution timed out after {timeout} seconds.",
-            file_path=file_path
-        ))
-    except Exception as e:
-        issues.append(ValidationIssue(
-            tool="checkov",
-            severity=Severity.HIGH,
-            message=f"checkov execution failed: {str(e)}",
-            file_path=file_path
-        ))
-    
-    return issues
-
-# ===== CORE BUSINESS LOGIC =====
-def validate_yaml_file(file_path: str, tools: ToolAvailability = None, timeout: int = 300) -> ValidationResult:
-    """Validate a YAML file using all available tools"""
-    if tools is None:
-        tools = ToolAvailability()
-    print_colored(f"\n🔍 Validating: {file_path}", Severity.INFO, bold=True)
-    print_colored("=" * 60, Severity.INFO)
-    
-    all_issues = []
-    syntax_valid = True
-    
-    # 1. Check YAML syntax
-    print_colored("\n📋 Checking YAML syntax...", Severity.INFO)
-    syntax_issues = validate_yaml_syntax(file_path)
-    all_issues.extend(syntax_issues)
-    
-    if syntax_issues:
-        syntax_valid = False
-        print_colored("❌ Syntax validation failed", Severity.CRITICAL)
-    else:
-        print_colored("✅ Syntax validation passed", Severity.INFO)
-    
-    # 2. Run yamllint
-    print_colored("\n🔧 Running yamllint...", Severity.INFO)
-    yamllint_issues = run_yamllint(file_path, timeout=timeout)
-    all_issues.extend(yamllint_issues)
-    
-    if yamllint_issues:
-        print_colored(f"⚠️  Found {len(yamllint_issues)} linting issues", Severity.MEDIUM)
-    else:
-        print_colored("✅ No linting issues found", Severity.INFO)
-    
-    # 3. Run checkov (if available)
-    if tools.checkov:
-        print_colored("\n🔒 Running security checks (checkov)...", Severity.INFO)
-        checkov_issues = run_checkov(file_path, timeout=timeout)
-        all_issues.extend(checkov_issues)
-        
-        if checkov_issues:
-            print_colored(f"🚨 Found {len(checkov_issues)} security issues", Severity.HIGH)
-        else:
-            print_colored("✅ No security issues found", Severity.INFO)
-    else:
-        print_colored("\n⚠️  Security checks skipped (checkov not available)", Severity.MEDIUM)
-    
-    # Generate summary
-    summary = {
-        'total': len(all_issues),
-        'critical': len([i for i in all_issues if i.severity == Severity.CRITICAL]),
-        'high': len([i for i in all_issues if i.severity == Severity.HIGH]),
-        'medium': len([i for i in all_issues if i.severity == Severity.MEDIUM]),
-        'low': len([i for i in all_issues if i.severity == Severity.LOW]),
-        'info': len([i for i in all_issues if i.severity == Severity.INFO])
-    }
-    
-    return ValidationResult(
-        file_path=file_path,
-        syntax_valid=syntax_valid,
-        issues=all_issues,
-        summary=summary
-    )
-
-def print_issues(issues: List[ValidationIssue]):
-    """Print issues with color coding"""
-    if not issues:
-        return
-    
-    print_colored("\n📋 Issues Found:", Severity.INFO, bold=True)
-    print_colored("-" * 60, Severity.INFO)
-    
-    # Group issues by severity
-    severity_groups = {}
-    for issue in issues:
-        if issue.severity not in severity_groups:
-            severity_groups[issue.severity] = []
-        severity_groups[issue.severity].append(issue)
-    
-    # Print issues by severity (critical first)
-    severity_order = [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO]
-    
-    for severity in severity_order:
-        if severity in severity_groups:
-            print_colored(f"\n{severity.value}:", severity, bold=True)
-            for issue in severity_groups[severity]:
-                location = ""
-                if issue.line:
-                    location = f" (Line {issue.line}"
-                    if issue.column:
-                        location += f", Col {issue.column}"
-                    location += ")"
-                
-                rule_info = f" [{issue.rule}]" if issue.rule else ""
-                print_colored(f"  • [{issue.tool}]{rule_info} {issue.message}{location}", severity)
-
-def print_summary_table(summary: Dict[str, int]):
-    """Print summary table with colors"""
-    print_colored("\n📊 Summary Report:", Severity.INFO, bold=True)
-    print_colored("=" * 60, Severity.INFO)
-    
-    # Table header
-    print_colored(f"{'Severity':<12} {'Count':<8} {'Status':<20}", Severity.INFO, bold=True)
-    print_colored("-" * 40, Severity.INFO)
-    
-    # Table rows
-    severity_items = [
-        ('CRITICAL', summary['critical'], Severity.CRITICAL),
-        ('HIGH', summary['high'], Severity.HIGH),
-        ('MEDIUM', summary['medium'], Severity.MEDIUM),
-        ('LOW', summary['low'], Severity.LOW),
-        ('INFO', summary['info'], Severity.INFO)
-    ]
-    
-    for name, count, severity in severity_items:
-        status = "❌ Issues Found" if count > 0 else "✅ Clean"
-        print_colored(f"{name:<12} {count:<8} {status:<20}", severity)
-    
-    print_colored("-" * 40, Severity.INFO)
-    total_color = Severity.CRITICAL if summary['total'] > 0 else Severity.INFO
-    print_colored(f"{'TOTAL':<12} {summary['total']:<8} {'Issues Found' if summary['total'] > 0 else 'All Clean'}", total_color, bold=True)
 
 # ===== FILE RESOLUTION =====
 def resolve_files(paths: List[str]) -> List[str]:
-    """Resolve file paths, directories, and glob patterns to a list of YAML files"""
+    """Resolve file paths, directories, and glob patterns to a list of YAML files."""
     yaml_extensions = {'.yaml', '.yml'}
     resolved = []
     seen = set()
@@ -438,6 +129,7 @@ def resolve_files(paths: List[str]) -> List[str]:
                 print_colored(f"Warning: '{path_arg}' not found, skipping", Severity.MEDIUM)
 
     return resolved
+
 
 # ===== INITIALIZATION & STARTUP =====
 def main():
@@ -530,6 +222,7 @@ def main():
     else:
         print_colored(f"⚠️  Validation completed with {total_issues} minor issues.", Severity.MEDIUM, bold=True)
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()
