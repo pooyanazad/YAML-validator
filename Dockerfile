@@ -16,6 +16,7 @@ RUN python3 -m pip install --upgrade pip && \
 
 # Copy the application and test files
 COPY app.py .
+COPY yaml_validator/ ./yaml_validator/
 COPY tests/ ./tests/
 COPY entrypoint.sh .
 
