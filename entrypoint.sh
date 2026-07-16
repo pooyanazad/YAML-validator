@@ -5,5 +5,6 @@ if [[ "$1" == "/bin/bash" ]] || [[ "$1" == "bash" ]] || [[ "$1" == "sh" ]] || [[
     exec "$@"
 fi
 
-# Otherwise, run the Python app with the provided arguments
+# Run the validator via the package entry point.
+# Also works as: python3 -m yaml_validator <args>
 exec python3 /app/app.py "$@"
