@@ -54,9 +54,31 @@ def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
         )]
 
     try:
+        # Detect binary content early (e.g. .yaml that is not text).
+        with open(file_path, 'rb') as raw:
+            sample = raw.read(8192)
+        if b'\x00' in sample:
+            return [ValidationIssue(
+                tool="yaml",
+                severity=Severity.MEDIUM,
+                message="Skipping binary file (null bytes detected); not valid YAML text",
+                rule="binary",
+                file_path=file_path,
+            )]
+
         with open(file_path, 'r', encoding='utf-8') as file:
             # Use safe_load_all to handle multiple documents
-            list(yaml.safe_load_all(file))
+            documents = list(yaml.safe_load_all(file))
+
+        # Empty / whitespace-only files yield [] or [None, ...] — report as INFO.
+        if not documents or all(doc is None for doc in documents):
+            return [ValidationIssue(
+                tool="yaml",
+                severity=Severity.INFO,
+                message="Empty YAML file (no documents)",
+                rule="empty",
+                file_path=file_path,
+            )]
     except yaml.YAMLError as e:
         mark = getattr(e, 'problem_mark', None)
         line_num = mark.line + 1 if mark else None
@@ -258,11 +280,37 @@ def validate_yaml_file(
     syntax_issues = validate_yaml_syntax(file_path)
     all_issues.extend(syntax_issues)
 
-    if syntax_issues:
+    is_binary = any(i.rule == "binary" for i in syntax_issues)
+    is_empty = any(i.rule == "empty" for i in syntax_issues)
+    blocking_syntax = [i for i in syntax_issues if i.severity not in (Severity.INFO,)]
+
+    if is_binary:
+        syntax_valid = False
+        print_colored("⚠️  Skipping further checks (binary file)", Severity.MEDIUM)
+    elif blocking_syntax:
         syntax_valid = False
         print_colored("❌ Syntax validation failed", Severity.CRITICAL)
+    elif is_empty:
+        print_colored("ℹ️  Empty YAML file", Severity.INFO)
     else:
         print_colored("✅ Syntax validation passed", Severity.INFO)
+
+    # Binary files: do not run yamllint/checkov (they expect text).
+    if is_binary:
+        summary = {
+            'total': len(all_issues),
+            'critical': len([i for i in all_issues if i.severity == Severity.CRITICAL]),
+            'high': len([i for i in all_issues if i.severity == Severity.HIGH]),
+            'medium': len([i for i in all_issues if i.severity == Severity.MEDIUM]),
+            'low': len([i for i in all_issues if i.severity == Severity.LOW]),
+            'info': len([i for i in all_issues if i.severity == Severity.INFO]),
+        }
+        return ValidationResult(
+            file_path=file_path,
+            syntax_valid=syntax_valid,
+            issues=all_issues,
+            summary=summary,
+        )
 
     # 2. Run yamllint
     print_colored("\n🔧 Running yamllint...", Severity.INFO)

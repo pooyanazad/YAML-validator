@@ -114,6 +114,35 @@ class TestValidateYamlSyntax:
         finally:
             os.unlink(path)
 
+    def test_empty_yaml_reports_info(self):
+        path = make_yaml("")
+        try:
+            issues = validate_yaml_syntax(path)
+            assert len(issues) == 1
+            assert issues[0].severity == Severity.INFO
+            assert issues[0].rule == "empty"
+        finally:
+            os.unlink(path)
+
+    def test_binary_yaml_reports_warning_and_skips(self):
+        f = tempfile.NamedTemporaryFile(suffix=".yaml", mode="wb", delete=False)
+        try:
+            f.write(b"PK\x03\x04\x00binary\x00content")
+            f.close()
+            issues = validate_yaml_syntax(f.name)
+            assert len(issues) == 1
+            assert issues[0].severity == Severity.MEDIUM
+            assert issues[0].rule == "binary"
+            result = validate_yaml_file(
+                f.name,
+                tools=ToolAvailability(yamllint=False, checkov=False),
+            )
+            assert result.syntax_valid is False
+            assert any(i.rule == "binary" for i in result.issues)
+            assert not any(i.tool == "yamllint" for i in result.issues)
+        finally:
+            os.unlink(f.name)
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # 2. run_yamllint
