@@ -114,6 +114,67 @@ class TestValidateYamlSyntax:
         finally:
             os.unlink(path)
 
+    # ── #13: empty YAML files ────────────────────────────────────────────────
+
+    def test_empty_file_reports_info_issue(self):
+        """An empty .yaml file should produce exactly one INFO issue (#13)."""
+        path = make_yaml("")
+        try:
+            issues = validate_yaml_syntax(path)
+            assert len(issues) == 1
+            assert issues[0].severity == Severity.INFO
+            assert issues[0].rule == "empty-file"
+        finally:
+            os.unlink(path)
+
+    def test_whitespace_only_file_reports_info_issue(self):
+        """A file with only whitespace/newlines should also be flagged as INFO."""
+        path = make_yaml("   \n\n  \n")
+        try:
+            issues = validate_yaml_syntax(path)
+            assert len(issues) == 1
+            assert issues[0].severity == Severity.INFO
+        finally:
+            os.unlink(path)
+
+    def test_comment_only_file_reports_info_issue(self):
+        """A file with only YAML comments (no data) is treated as empty."""
+        path = make_yaml("# This file intentionally left blank\n")
+        try:
+            issues = validate_yaml_syntax(path)
+            assert len(issues) == 1
+            assert issues[0].severity == Severity.INFO
+            assert issues[0].rule == "empty-file"
+        finally:
+            os.unlink(path)
+
+    # ── #14: binary files ────────────────────────────────────────────────────
+
+    def test_binary_file_reports_medium_warning(self):
+        """A binary file (contains null bytes) should warn MEDIUM, not crash (#14)."""
+        f = tempfile.NamedTemporaryFile(suffix=".yaml", delete=False)
+        f.write(b"\x00\x01\x02binary\x00data")
+        f.close()
+        try:
+            issues = validate_yaml_syntax(f.name)
+            assert len(issues) == 1
+            assert issues[0].severity == Severity.MEDIUM
+            assert issues[0].rule == "binary-file"
+            assert "binary" in issues[0].message.lower()
+        finally:
+            os.unlink(f.name)
+
+    def test_binary_file_does_not_raise(self):
+        """validate_yaml_syntax must never raise on a binary file."""
+        f = tempfile.NamedTemporaryFile(suffix=".yaml", delete=False)
+        f.write(bytes(range(256)))  # All byte values including many null bytes
+        f.close()
+        try:
+            issues = validate_yaml_syntax(f.name)  # Should not raise
+            assert isinstance(issues, list)
+        finally:
+            os.unlink(f.name)
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # 2. run_yamllint
