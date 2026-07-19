@@ -53,10 +53,47 @@ def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
             file_path=file_path,
         )]
 
+    # #14 — Detect binary files early by sniffing for null bytes.
+    # Avoids a confusing UnicodeDecodeError later; report as MEDIUM warning.
+    try:
+        with open(file_path, 'rb') as raw:
+            chunk = raw.read(8192)
+        if b'\x00' in chunk:
+            return [ValidationIssue(
+                tool="yaml",
+                severity=Severity.MEDIUM,
+                message=(
+                    f"File appears to be binary (contains null bytes): {file_path}. "
+                    "Rename or remove the file — it cannot be validated as YAML."
+                ),
+                rule="binary-file",
+                file_path=file_path,
+            )]
+    except OSError as e:
+        return [ValidationIssue(
+            tool="yaml",
+            severity=Severity.CRITICAL,
+            message=f"File reading error: {str(e)}",
+            file_path=file_path,
+        )]
+
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             # Use safe_load_all to handle multiple documents
-            list(yaml.safe_load_all(file))
+            documents = list(yaml.safe_load_all(file))
+
+        # #13 — Detect empty YAML files.
+        # safe_load_all returns [] for truly empty / whitespace / comment-only
+        # files, and [None] for files that contain an explicit null document.
+        # Neither case contains meaningful data — report as INFO.
+        if not documents or all(doc is None for doc in documents):
+            issues.append(ValidationIssue(
+                tool="yaml",
+                severity=Severity.INFO,
+                message="File is empty or contains only whitespace/comments.",
+                rule="empty-file",
+                file_path=file_path,
+            ))
     except yaml.YAMLError as e:
         mark = getattr(e, 'problem_mark', None)
         line_num = mark.line + 1 if mark else None
