@@ -3,7 +3,7 @@ import pytest
 import tempfile
 from pathlib import Path
 
-FIXTURES_DIR = Path(__file__).parent
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 @pytest.fixture
 def clean_file():
