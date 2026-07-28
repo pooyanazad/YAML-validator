@@ -1,0 +1,80 @@
+---
+# Advanced security test - Cloud infrastructure with multiple vulnerabilities
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: production
+data:
+  database_url: "postgresql://admin:SuperSecret123@db.company.com:5432/prod"
+  api_key: "sk-proj-1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  jwt_secret: "my-jwt-secret-key-12345"
+  encryption_key: "AES256-ENCRYPTION-KEY-ABCDEF123456"
+  slack_webhook: "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+  github_token: "ghp_1234567890abcdefghijklmnopqrstuvwxyz123"
+  aws_access_key: "AKIA_FAKE_ACCESS_KEY_EXAMPLE"
+  aws_secret_key: "fake_secret_key_for_testing_purposes_only"
+  stripe_secret: "sk_test_fake_stripe_key_for_testing"
+  sendgrid_api_key: "SG.fake_sendgrid_key.for_testing_only"
+  private_key: |
+    -----BEGIN PRIVATE KEY-----
+    MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDGtJQWZ8F5qY2X
+    vL3mN9pR7sT1uV8wX2yZ4aB6cD9eF0gH1iJ2kL3mN4oP5qR6sT7uV8wX9yZ0aB1c
+    -----END PRIVATE KEY-----
+  ssl_certificate: |
+    -----BEGIN CERTIFICATE-----
+    MIIDXTCCAkWgAwIBAgIJAKoK/OvD8WYOMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV
+    BAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX
+    -----END CERTIFICATE-----
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vulnerable-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vulnerable-app
+  template:
+    metadata:
+      labels:
+        app: vulnerable-app
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: app
+        image: myapp:latest
+        securityContext:
+          runAsUser: 0
+          privileged: true
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            add:
+              - SYS_ADMIN
+              - NET_ADMIN
+              - SYS_PTRACE
+              - DAC_OVERRIDE
+        env:
+        - name: ROOT_PASSWORD
+          value: "admin123"
+        - name: MYSQL_ROOT_PASSWORD
+          value: "root"
+        ports:
+        - containerPort: 8080
+          hostPort: 8080
+        volumeMounts:
+        - name: host-root
+          mountPath: /host
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+      volumes:
+      - name: host-root
+        hostPath:
+          path: /
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock

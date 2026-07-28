@@ -1,0 +1,85 @@
+# Test YAML file with security and configuration issues
+# This file has valid syntax but contains security vulnerabilities
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: default
+data:
+  # Security issues: sensitive data in plain text
+  database_url: "postgresql://admin:password123@localhost:5432/mydb"
+  jwt_secret: "my-super-secret-jwt-key-12345"
+  aws_access_key: "AKIAIOSFODNN7EXAMPLE"
+  aws_secret_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  
+  # Configuration with potential issues
+  debug_mode: "true"
+  log_level: "DEBUG"
+  
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vulnerable-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vulnerable-app
+  template:
+    metadata:
+      labels:
+        app: vulnerable-app
+    spec:
+      containers:
+      - name: app
+        image: myapp:latest
+        ports:
+        - containerPort: 8080
+        securityContext:
+          runAsUser: 0  # Security issue: running as root
+          allowPrivilegeEscalation: true  # Security issue
+          readOnlyRootFilesystem: false  # Security issue
+        env:
+        - name: DB_PASSWORD
+          value: "admin123"  # Security issue: hardcoded password
+        - name: ADMIN_TOKEN
+          value: "token-12345"  # Security issue: hardcoded token
+        resources: {}  # Missing resource limits
+        
+---
+# Docker Compose with security issues
+version: '3.8'
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - SECRET_KEY=my-secret-key-123  # Hardcoded secret
+      - DATABASE_URL=postgres://user:pass@db:5432/mydb  # Hardcoded credentials
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # Security risk: Docker socket
+      - /:/host:ro  # Security risk: mounting root filesystem
+    network_mode: host  # Security issue: host networking
+    privileged: true  # Security issue: privileged mode
+    
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_PASSWORD: weakpassword  # Weak password
+      POSTGRES_DB: myapp
+    ports:
+      - "5432:5432"  # Exposing database port
+    volumes:
+      - /etc/passwd:/etc/passwd:ro  # Mounting sensitive file
+
+# Linting issues
+extra_long_key_name_that_exceeds_reasonable_length_and_should_trigger_warnings: "value"
+
+# Inconsistent spacing
+spacing_issues:
+  key1:value1  # Missing space after colon
+  key2 :value2  # Extra space before colon
+  key3 : value3  # Extra spaces around colon
