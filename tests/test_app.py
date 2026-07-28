@@ -28,15 +28,13 @@ from app import (
     ToolAvailability,
 )
 
+
 # ─────────────────────────────────────────────────────────────────────────────
 FIXTURES = Path(__file__).parent   # tests/ directory
-CLEAN_FILE    = str(FIXTURES / "test3_clean.yaml")
-ISSUES_FILE   = str(FIXTURES / "test1_issues.yaml")
-SECURITY_FILE = str(FIXTURES / "security_test1.yaml")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-def make_yaml(content: str) -> str:
+def tmp_yaml(content: str) -> str:
     """Write content to a temp YAML file, return its path."""
     f = tempfile.NamedTemporaryFile(suffix=".yaml", mode="w", delete=False)
     f.write(content)
@@ -49,25 +47,25 @@ def make_yaml(content: str) -> str:
 # ═════════════════════════════════════════════════════════════════════════════
 class TestValidateYamlSyntax:
 
-    def test_valid_yaml_returns_no_issues(self):
-        issues = validate_yaml_syntax(CLEAN_FILE)
+    def test_valid_yaml_returns_no_issues(self, clean_file):
+        issues = validate_yaml_syntax(clean_file)
         assert issues == [], f"Expected no issues, got: {issues}"
 
-    def test_invalid_yaml_returns_critical_issue(self):
-        issues = validate_yaml_syntax(ISSUES_FILE)
+    def test_invalid_yaml_returns_critical_issue(self, issues_file):
+        issues = validate_yaml_syntax(issues_file)
         assert len(issues) > 0
         assert issues[0].severity == Severity.CRITICAL
 
-    def test_issue_tool_is_yaml(self):
-        issues = validate_yaml_syntax(ISSUES_FILE)
+    def test_issue_tool_is_yaml(self, issues_file):
+        issues = validate_yaml_syntax(issues_file)
         assert all(i.tool == "yaml" for i in issues)
 
-    def test_issue_contains_line_number(self):
-        issues = validate_yaml_syntax(ISSUES_FILE)
+    def test_issue_contains_line_number(self, issues_file):
+        issues = validate_yaml_syntax(issues_file)
         assert any(i.line is not None for i in issues), "Expected at least one issue with a line number"
 
-    def test_issue_rule_is_syntax(self):
-        issues = validate_yaml_syntax(ISSUES_FILE)
+    def test_issue_rule_is_syntax(self, issues_file):
+        issues = validate_yaml_syntax(issues_file)
         assert any(i.rule == "syntax" for i in issues)
 
     def test_missing_file_returns_critical_issue(self):
@@ -76,9 +74,9 @@ class TestValidateYamlSyntax:
         assert issues[0].severity == Severity.CRITICAL
         assert "File not found" in issues[0].message
 
-    def test_permission_denied_returns_critical_issue(self):
+    def test_permission_denied_returns_critical_issue(self, tmp_yaml):
         """Unreadable file gives clear 'Permission denied' error."""
-        path = make_yaml("key: value\n")
+        path = tmp_yaml("key: value\n")
         try:
             os.chmod(path, 0o000)  # Remove all permissions
             issues = validate_yaml_syntax(path)
@@ -89,16 +87,16 @@ class TestValidateYamlSyntax:
             os.chmod(path, 0o644)  # Restore so we can delete it
             os.unlink(path)
 
-    def test_inline_valid_yaml(self):
-        path = make_yaml("key: value\nlist:\n  - a\n  - b\n")
+    def test_inline_valid_yaml(self, tmp_yaml):
+        path = tmp_yaml("key: value\nlist:\n  - a\n  - b\n")
         try:
             issues = validate_yaml_syntax(path)
             assert issues == []
         finally:
             os.unlink(path)
 
-    def test_inline_broken_yaml(self):
-        path = make_yaml("key: value\n  bad_indent: oops\n")
+    def test_inline_broken_yaml(self, tmp_yaml):
+        path = tmp_yaml("key: value\n  bad_indent: oops\n")
         try:
             issues = validate_yaml_syntax(path)
             assert len(issues) > 0
@@ -106,8 +104,8 @@ class TestValidateYamlSyntax:
         finally:
             os.unlink(path)
 
-    def test_multi_document_yaml_is_valid(self):
-        path = make_yaml("---\nkey: value\n---\nother: doc\n")
+    def test_multi_document_yaml_is_valid(self, tmp_yaml):
+        path = tmp_yaml("---\nkey: value\n---\nother: doc\n")
         try:
             issues = validate_yaml_syntax(path)
             assert issues == []
@@ -116,9 +114,9 @@ class TestValidateYamlSyntax:
 
     # ── #13: empty YAML files ────────────────────────────────────────────────
 
-    def test_empty_file_reports_info_issue(self):
+    def test_empty_file_reports_info_issue(self, tmp_yaml):
         """An empty .yaml file should produce exactly one INFO issue (#13)."""
-        path = make_yaml("")
+        path = tmp_yaml("")
         try:
             issues = validate_yaml_syntax(path)
             assert len(issues) == 1
@@ -127,9 +125,9 @@ class TestValidateYamlSyntax:
         finally:
             os.unlink(path)
 
-    def test_whitespace_only_file_reports_info_issue(self):
+    def test_whitespace_only_file_reports_info_issue(self, tmp_yaml):
         """A file with only whitespace/newlines should also be flagged as INFO."""
-        path = make_yaml("   \n\n  \n")
+        path = tmp_yaml("   \n\n  \n")
         try:
             issues = validate_yaml_syntax(path)
             assert len(issues) == 1
@@ -137,9 +135,9 @@ class TestValidateYamlSyntax:
         finally:
             os.unlink(path)
 
-    def test_comment_only_file_reports_info_issue(self):
+    def test_comment_only_file_reports_info_issue(self, tmp_yaml):
         """A file with only YAML comments (no data) is treated as empty."""
-        path = make_yaml("# This file intentionally left blank\n")
+        path = tmp_yaml("# This file intentionally left blank\n")
         try:
             issues = validate_yaml_syntax(path)
             assert len(issues) == 1
@@ -181,26 +179,26 @@ class TestValidateYamlSyntax:
 # ═════════════════════════════════════════════════════════════════════════════
 class TestRunYamllint:
 
-    def test_clean_file_has_no_linting_issues(self):
-        issues = run_yamllint(CLEAN_FILE)
+    def test_clean_file_has_no_linting_issues(self, clean_file):
+        issues = run_yamllint(clean_file)
         assert issues == [], f"Expected no linting issues, got: {issues}"
 
-    def test_issues_file_has_linting_issues(self):
-        issues = run_yamllint(ISSUES_FILE)
+    def test_issues_file_has_linting_issues(self, issues_file):
+        issues = run_yamllint(issues_file)
         assert len(issues) > 0
 
-    def test_tool_is_yamllint(self):
-        issues = run_yamllint(ISSUES_FILE)
+    def test_tool_is_yamllint(self, issues_file):
+        issues = run_yamllint(issues_file)
         assert all(i.tool == "yamllint" for i in issues)
 
-    def test_yamllint_errors_map_to_medium_severity(self):
-        issues = run_yamllint(ISSUES_FILE)
+    def test_yamllint_errors_map_to_medium_severity(self, issues_file):
+        issues = run_yamllint(issues_file)
         # Any rule that was an 'error' will have MEDIUM severity
         error_issues = [i for i in issues if i.severity == Severity.MEDIUM]
         assert len(error_issues) > 0, "Expected at least one yamllint error (MEDIUM severity)"
 
-    def test_yamllint_warnings_map_to_low_severity(self):
-        issues = run_yamllint(ISSUES_FILE)
+    def test_yamllint_warnings_map_to_low_severity(self, issues_file):
+        issues = run_yamllint(issues_file)
         # Any rule that was a 'warning' will have LOW severity
         warn_issues = [i for i in issues if i.severity == Severity.LOW]
         for issue in warn_issues:
@@ -208,13 +206,13 @@ class TestRunYamllint:
                 f"yamllint 'warning' should be LOW, got {issue.severity}"
             )
 
-    def test_issues_have_line_numbers(self):
-        issues = run_yamllint(ISSUES_FILE)
+    def test_issues_have_line_numbers(self, issues_file):
+        issues = run_yamllint(issues_file)
         assert any(i.line is not None for i in issues)
 
-    def test_no_stray_brackets_in_messages(self):
+    def test_no_stray_brackets_in_messages(self, issues_file):
         """Regression: old parser left trailing ] in messages."""
-        issues = run_yamllint(ISSUES_FILE)
+        issues = run_yamllint(issues_file)
         for issue in issues:
             assert not issue.message.endswith("]"), (
                 f"Stray ']' found in message: '{issue.message}'"
@@ -296,8 +294,8 @@ class TestRunCheckov:
         assert len(issues) == 1
         assert issues[0].severity == Severity.HIGH
         assert "timed out after 300 seconds" in issues[0].message
-    def test_trailing_spaces_detected(self):
-        path = make_yaml("key: value   \n")
+    def test_trailing_spaces_detected(self, tmp_yaml):
+        path = tmp_yaml("key: value   \n")
         try:
             issues = run_yamllint(path)
             messages = " ".join(i.message for i in issues)
@@ -311,13 +309,13 @@ class TestRunCheckov:
 # ═════════════════════════════════════════════════════════════════════════════
 class TestResolveFiles:
 
-    def test_single_file_resolved(self):
-        result = resolve_files([CLEAN_FILE])
+    def test_single_file_resolved(self, clean_file):
+        result = resolve_files([clean_file])
         assert len(result) == 1
-        assert result[0] == CLEAN_FILE
+        assert result[0] == clean_file
 
-    def test_multiple_files_resolved(self):
-        result = resolve_files([CLEAN_FILE, ISSUES_FILE])
+    def test_multiple_files_resolved(self, clean_file, issues_file):
+        result = resolve_files([clean_file, issues_file])
         assert len(result) == 2
 
     def test_directory_finds_yaml_files(self):
@@ -330,13 +328,13 @@ class TestResolveFiles:
         # We know we have at least 11 test files
         assert len(result) >= 11
 
-    def test_deduplication_same_file_twice(self):
-        result = resolve_files([CLEAN_FILE, CLEAN_FILE])
+    def test_deduplication_same_file_twice(self, clean_file):
+        result = resolve_files([clean_file, clean_file])
         assert len(result) == 1, "Duplicate file should be deduplicated"
 
-    def test_deduplication_dir_and_file(self):
+    def test_deduplication_dir_and_file(self, clean_file):
         """Dir scan + explicit file reference should not duplicate."""
-        result = resolve_files([str(FIXTURES), CLEAN_FILE])
+        result = resolve_files([str(FIXTURES), clean_file])
         clean_count = sum(1 for f in result if Path(f).name == "test3_clean.yaml")
         assert clean_count == 1
 
@@ -361,65 +359,65 @@ class TestResolveFiles:
 # ═════════════════════════════════════════════════════════════════════════════
 class TestValidateYamlFile:
 
-    def test_clean_file_syntax_valid_true(self):
-        result = validate_yaml_file(CLEAN_FILE)
+    def test_clean_file_syntax_valid_true(self, clean_file):
+        result = validate_yaml_file(clean_file)
         assert result.syntax_valid is True
 
-    def test_clean_file_zero_critical(self):
-        result = validate_yaml_file(CLEAN_FILE)
+    def test_clean_file_zero_critical(self, clean_file):
+        result = validate_yaml_file(clean_file)
         assert result.summary["critical"] == 0
 
-    def test_clean_file_total_zero(self):
-        result = validate_yaml_file(CLEAN_FILE)
+    def test_clean_file_total_zero(self, clean_file):
+        result = validate_yaml_file(clean_file)
         # Clean file should have no issues at all
         assert result.summary["total"] == 0
 
-    def test_issues_file_syntax_invalid(self):
-        result = validate_yaml_file(ISSUES_FILE)
+    def test_issues_file_syntax_invalid(self, issues_file):
+        result = validate_yaml_file(issues_file)
         assert result.syntax_valid is False
 
-    def test_issues_file_has_critical(self):
-        result = validate_yaml_file(ISSUES_FILE)
+    def test_issues_file_has_critical(self, issues_file):
+        result = validate_yaml_file(issues_file)
         assert result.summary["critical"] > 0
 
-    def test_issues_file_has_medium_from_yamllint(self):
-        result = validate_yaml_file(ISSUES_FILE)
+    def test_issues_file_has_medium_from_yamllint(self, issues_file):
+        result = validate_yaml_file(issues_file)
         assert result.summary["medium"] > 0, "yamllint errors should appear as MEDIUM"
 
-    def test_result_contains_file_path(self):
-        result = validate_yaml_file(CLEAN_FILE)
-        assert result.file_path == CLEAN_FILE
+    def test_result_contains_file_path(self, clean_file):
+        result = validate_yaml_file(clean_file)
+        assert result.file_path == clean_file
 
-    def test_result_is_validation_result_type(self):
-        result = validate_yaml_file(CLEAN_FILE)
+    def test_result_is_validation_result_type(self, clean_file):
+        result = validate_yaml_file(clean_file)
         assert isinstance(result, ValidationResult)
 
-    def test_summary_keys_present(self):
-        result = validate_yaml_file(CLEAN_FILE)
+    def test_summary_keys_present(self, clean_file):
+        result = validate_yaml_file(clean_file)
         for key in ("total", "critical", "high", "medium", "low", "info"):
             assert key in result.summary, f"Missing summary key: {key}"
 
-    def test_summary_total_equals_sum_of_severities(self):
-        result = validate_yaml_file(ISSUES_FILE)
+    def test_summary_total_equals_sum_of_severities(self, issues_file):
+        result = validate_yaml_file(issues_file)
         s = result.summary
         assert s["total"] == s["critical"] + s["high"] + s["medium"] + s["low"] + s["info"]
 
-    def test_issues_list_matches_summary_total(self):
-        result = validate_yaml_file(ISSUES_FILE)
+    def test_issues_list_matches_summary_total(self, issues_file):
+        result = validate_yaml_file(issues_file)
         assert len(result.issues) == result.summary["total"]
 
-    def test_all_issues_have_required_fields(self):
-        result = validate_yaml_file(ISSUES_FILE)
+    def test_all_issues_have_required_fields(self, issues_file):
+        result = validate_yaml_file(issues_file)
         for issue in result.issues:
             assert isinstance(issue, ValidationIssue)
             assert issue.tool in ("yaml", "yamllint", "checkov")
             assert isinstance(issue.severity, Severity)
             assert issue.message
 
-    def test_checkov_false_produces_no_checkov_issues(self):
+    def test_checkov_false_produces_no_checkov_issues(self, security_file):
         """When tools.checkov=False, no checkov issues should appear in results."""
         tools = ToolAvailability(checkov=False)
-        result = validate_yaml_file(SECURITY_FILE, tools)
+        result = validate_yaml_file(security_file, tools)
         checkov_issues = [i for i in result.issues if i.tool == "checkov"]
         assert checkov_issues == [], (
             f"Expected no checkov issues when checkov=False, got: {checkov_issues}"
@@ -430,15 +428,15 @@ class TestValidateYamlFile:
         tools = ToolAvailability()
         assert tools.checkov is True
 
-    def test_tools_parameter_is_optional(self):
+    def test_tools_parameter_is_optional(self, clean_file):
         """validate_yaml_file() works fine with no tools argument (uses defaults)."""
-        result = validate_yaml_file(CLEAN_FILE)
+        result = validate_yaml_file(clean_file)
         assert isinstance(result, ValidationResult)
 
-    def test_yamllint_false_only_runs_syntax_and_security(self):
+    def test_yamllint_false_only_runs_syntax_and_security(self, tmp_yaml):
         """When tools.yamllint=False, validate_yaml_file skips yamllint."""
         # A file that has trailing-space linting issues but valid syntax
-        path = make_yaml("key: value   \n")
+        path = tmp_yaml("key: value   \n")
         try:
             tools = ToolAvailability(yamllint=False, checkov=False)
             result = validate_yaml_file(path, tools)
