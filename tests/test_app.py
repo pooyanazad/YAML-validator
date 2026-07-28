@@ -30,7 +30,7 @@ from app import (
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-FIXTURES = Path(__file__).parent   # tests/ directory
+FIXTURES = Path(__file__).parent / "fixtures"   # tests/fixtures directory
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
