@@ -98,23 +98,28 @@ Issues are grouped by severity (**Critical → High → Medium → Low**) with c
 ## Release Notes
 
 <!-- RELEASE_NOTES_START -->
-### v3.1.0-20260701 — 2026-07-01
+### v3.2.0-20260801 — 2026-08-01
 
 **Changes since last release:**
-* test: mock timeout handling correctly (Day 10) (6753344)
-* feat: make timeout configurable (Day 9) (55bef66)
-* feat: add timeout to check_dependencies() (Day 8) (913339e)
-* feat: add timeouts to subprocess calls (Day 7) (7097990)
-* fix: add missing stderr to test mock (0a692be)
-* feat: handle yamllint edge cases gracefully (Day 6) (50d7aa1)
-* test: add Day 5 verification for regex parsing colons (30ff916)
-* fix: replace fragile string splitting with robust regex for yamllint parsing (fd1e0cf)
-* test: add Day 2 tests for ToolAvailability and check_dependencies() (6a42995)
-* refactor: replace CHECKOV_AVAILABLE global with ToolAvailability dataclass (3f6f670)
-* ci: add App Tests stage with pytest report output before Docker tests and release (4a741da)
-* test: add pytest app functionality tests (41 tests across 5 test classes) (b9e5032)
-* test: improve Docker integration tests with real exit code and output assertions (2fcec57)
-* ci: split pipeline into 7 separate jobs for clear stage visibility (0b38079)
+* test: restore missing test fixtures (26925a3)
+* ci: fix docker integration tests path for fixtures (f06babb)
+* test: add test coverage reporting (f062eb7)
+* test: add pytest.ini with standard configuration (12e6222)
+* test: move fixtures to tests/fixtures/ (110ce94)
+* test: add conftest.py with shared fixtures (c3b007d)
+* fix: handle empty and binary YAML files gracefully (#13, #14) (a2fd60e)
+* refactor: make app.py a thin entry point, add package __main__ (#20) (54e89e7)
+* refactor: move CLI to yaml_validator/cli.py (#19) (a9943e7)
+* fix: add yaml_validator package to Docker image and move output helpers (22156f2)
+* refactor: move validators and output helpers to package (#17) (0654563)
+* refactor: move models to yaml_validator/models.py (#16) (0c69408)
+* refactor: create yaml_validator/ package scaffold (#15) (bba3051)
+* ci: remove docker image artifact upload/download (Closes #17) (b90d9b6)
+* docs: add CONTRIBUTING.md (c6885bf)
+* chore: add PR template and update CI triggers (fda6adf)
+* cleanup: remove Day N labels from comments and docstrings (4b3ee83)
+* feat: add file permission check before opening YAML files (Day 12) (97a1f7a)
+* refactor: narrow exception catches in validate_yaml_syntax (Day 11) (223bd1c)
 
-**Docker Image:** `pooyanazad/yaml-checker:v3.1.0-20260701`
+**Docker Image:** `pooyanazad/yaml-checker:v3.2.0-20260801`
 <!-- RELEASE_NOTES_END -->
