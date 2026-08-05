@@ -26,6 +26,8 @@ from app import (
     ValidationResult,
     Severity,
     ToolAvailability,
+    print_colored,
+    print_issues,
 )
 
 
@@ -523,3 +525,66 @@ class TestToolAvailability:
             result = check_dependencies()
         assert result.checkov is False
         assert result.yamllint is True
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 7. print_colored  (#25)
+# ═════════════════════════════════════════════════════════════════════════════
+class TestPrintColored:
+    """#25 — Use capsys to capture stdout and verify correct formatting."""
+
+    def test_critical_severity_contains_text(self, capsys):
+        print_colored("critical message", Severity.CRITICAL)
+        captured = capsys.readouterr()
+        assert "critical message" in captured.out
+
+    def test_high_severity_contains_text(self, capsys):
+        print_colored("high message", Severity.HIGH)
+        captured = capsys.readouterr()
+        assert "high message" in captured.out
+
+    def test_medium_severity_contains_text(self, capsys):
+        print_colored("medium message", Severity.MEDIUM)
+        captured = capsys.readouterr()
+        assert "medium message" in captured.out
+
+    def test_low_severity_contains_text(self, capsys):
+        print_colored("low message", Severity.LOW)
+        captured = capsys.readouterr()
+        assert "low message" in captured.out
+
+    def test_info_severity_contains_text(self, capsys):
+        print_colored("info message", Severity.INFO)
+        captured = capsys.readouterr()
+        assert "info message" in captured.out
+
+    def test_no_severity_still_prints(self, capsys):
+        """Calling with severity=None (default) should still print the text."""
+        print_colored("plain text")
+        captured = capsys.readouterr()
+        assert "plain text" in captured.out
+
+    def test_bold_flag_does_not_suppress_text(self, capsys):
+        print_colored("bold text", Severity.CRITICAL, bold=True)
+        captured = capsys.readouterr()
+        assert "bold text" in captured.out
+
+    def test_output_ends_with_newline(self, capsys):
+        """print() always appends a newline — verify it."""
+        print_colored("newline test", Severity.INFO)
+        captured = capsys.readouterr()
+        assert captured.out.endswith("\n")
+
+    def test_nothing_printed_to_stderr(self, capsys):
+        print_colored("no stderr", Severity.LOW)
+        captured = capsys.readouterr()
+        assert captured.err == ""
+
+    def test_each_severity_level_produces_output(self, capsys):
+        """Smoke-test: all five severity levels produce non-empty stdout."""
+        for severity in Severity:
+            print_colored("test", severity)
+            captured = capsys.readouterr()
+            assert captured.out.strip() != "", f"No output for severity {severity}"
+
+
