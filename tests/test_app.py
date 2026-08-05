@@ -588,3 +588,104 @@ class TestPrintColored:
             assert captured.out.strip() != "", f"No output for severity {severity}"
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# 8. print_issues grouping  (#26)
+# ═════════════════════════════════════════════════════════════════════════════
+class TestPrintIssues:
+    """#26 — Verify issues are grouped by severity in CRITICAL→INFO order."""
+
+    def _make_issue(self, severity: Severity, message: str) -> ValidationIssue:
+        return ValidationIssue(tool="test", severity=severity, message=message)
+
+    def test_empty_list_prints_nothing(self, capsys):
+        print_issues([])
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_single_critical_issue_appears_in_output(self, capsys):
+        issues = [self._make_issue(Severity.CRITICAL, "critical problem")]
+        print_issues(issues)
+        captured = capsys.readouterr()
+        assert "critical problem" in captured.out
+
+    def test_critical_appears_before_info(self, capsys):
+        """CRITICAL issues must appear before INFO issues in output."""
+        issues = [
+            self._make_issue(Severity.INFO, "info detail"),
+            self._make_issue(Severity.CRITICAL, "critical detail"),
+        ]
+        print_issues(issues)
+        captured = capsys.readouterr()
+        critical_pos = captured.out.index("critical detail")
+        info_pos = captured.out.index("info detail")
+        assert critical_pos < info_pos, "CRITICAL must come before INFO in output"
+
+    def test_severity_order_critical_high_medium_low_info(self, capsys):
+        """Full ordering: CRITICAL → HIGH → MEDIUM → LOW → INFO."""
+        issues = [
+            self._make_issue(Severity.INFO,     "msg-info"),
+            self._make_issue(Severity.LOW,      "msg-low"),
+            self._make_issue(Severity.MEDIUM,   "msg-medium"),
+            self._make_issue(Severity.HIGH,     "msg-high"),
+            self._make_issue(Severity.CRITICAL, "msg-critical"),
+        ]
+        print_issues(issues)
+        captured = capsys.readouterr()
+        out = captured.out
+        pos_critical = out.index("msg-critical")
+        pos_high     = out.index("msg-high")
+        pos_medium   = out.index("msg-medium")
+        pos_low      = out.index("msg-low")
+        pos_info     = out.index("msg-info")
+        assert pos_critical < pos_high < pos_medium < pos_low < pos_info, (
+            "Expected output order: CRITICAL < HIGH < MEDIUM < LOW < INFO"
+        )
+
+    def test_issues_with_line_and_column_shown(self, capsys):
+        issue = ValidationIssue(
+            tool="yaml", severity=Severity.HIGH,
+            message="bad indent", line=42, column=7
+        )
+        print_issues([issue])
+        captured = capsys.readouterr()
+        assert "42" in captured.out
+        assert "7" in captured.out
+
+    def test_issues_with_rule_shown(self, capsys):
+        issue = ValidationIssue(
+            tool="yamllint", severity=Severity.MEDIUM,
+            message="trailing spaces", rule="trailing-spaces"
+        )
+        print_issues([issue])
+        captured = capsys.readouterr()
+        assert "trailing-spaces" in captured.out
+
+    def test_issues_without_optional_fields(self, capsys):
+        """Issues with no line/column/rule must not crash and still show message."""
+        issue = ValidationIssue(tool="yaml", severity=Severity.LOW, message="bare message")
+        print_issues([issue])
+        captured = capsys.readouterr()
+        assert "bare message" in captured.out
+
+    def test_header_printed_when_issues_present(self, capsys):
+        issues = [self._make_issue(Severity.INFO, "something")]
+        print_issues(issues)
+        captured = capsys.readouterr()
+        assert "Issues Found" in captured.out
+
+    def test_multiple_issues_same_severity_all_appear(self, capsys):
+        issues = [
+            self._make_issue(Severity.HIGH, "first high"),
+            self._make_issue(Severity.HIGH, "second high"),
+        ]
+        print_issues(issues)
+        captured = capsys.readouterr()
+        assert "first high" in captured.out
+        assert "second high" in captured.out
+
+    def test_severity_label_printed_as_header(self, capsys):
+        """Each severity group should have its label (e.g. 'HIGH:') in output."""
+        issues = [self._make_issue(Severity.HIGH, "some high issue")]
+        print_issues(issues)
+        captured = capsys.readouterr()
+        assert "HIGH" in captured.out
