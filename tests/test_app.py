@@ -28,6 +28,7 @@ from app import (
     ToolAvailability,
     print_colored,
     print_issues,
+    print_summary_table,
 )
 
 
@@ -689,3 +690,264 @@ class TestPrintIssues:
         print_issues(issues)
         captured = capsys.readouterr()
         assert "HIGH" in captured.out
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 9. print_summary_table  (#27)
+# ═════════════════════════════════════════════════════════════════════════════
+class TestPrintSummaryTable:
+    """#27 — Verify the summary table renders correctly and counts match."""
+
+    def _make_summary(self, critical=0, high=0, medium=0, low=0, info=0) -> dict:
+        total = critical + high + medium + low + info
+        return {
+            'critical': critical,
+            'high': high,
+            'medium': medium,
+            'low': low,
+            'info': info,
+            'total': total,
+        }
+
+    # ── Structure ──────────────────────────────────────────────────────────
+
+    def test_header_line_present(self, capsys):
+        """Output must contain the 'Summary Report' header."""
+        print_summary_table(self._make_summary())
+        out = capsys.readouterr().out
+        assert "Summary" in out
+
+    def test_severity_names_present(self, capsys):
+        """All five severity names appear in the table."""
+        print_summary_table(self._make_summary())
+        out = capsys.readouterr().out
+        for name in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"):
+            assert name in out, f"Missing severity label '{name}' in table output"
+
+    def test_total_row_present(self, capsys):
+        """A TOTAL row must be present in the output."""
+        print_summary_table(self._make_summary(high=2))
+        out = capsys.readouterr().out
+        assert "TOTAL" in out
+
+    # ── Zero-issue state ────────────────────────────────────────────────────
+
+    def test_all_clean_shows_zero_counts(self, capsys):
+        """When all counts are 0, every row shows 0."""
+        print_summary_table(self._make_summary())
+        out = capsys.readouterr().out
+        # All five severity rows + TOTAL should show 0
+        # Count occurrences of '0' (at least 6: five rows + total)
+        assert out.count("0") >= 6
+
+    def test_all_clean_total_is_zero(self, capsys):
+        """Clean run: total shown in TOTAL row is 0."""
+        print_summary_table(self._make_summary())
+        out = capsys.readouterr().out
+        # The TOTAL line should contain '0'
+        total_line = [l for l in out.splitlines() if "TOTAL" in l]
+        assert total_line, "TOTAL row not found"
+        assert "0" in total_line[0]
+
+    def test_all_clean_status_label(self, capsys):
+        """Clean run: status should indicate 'Clean' or similar."""
+        print_summary_table(self._make_summary())
+        out = capsys.readouterr().out
+        assert "Clean" in out or "All Clean" in out
+
+    # ── Non-zero counts ─────────────────────────────────────────────────────
+
+    def test_critical_count_appears_in_output(self, capsys):
+        """A critical count of 3 must appear in the output."""
+        print_summary_table(self._make_summary(critical=3))
+        out = capsys.readouterr().out
+        assert "3" in out
+
+    def test_total_equals_sum_of_severities(self, capsys):
+        """TOTAL row count must equal the sum of individual severity counts."""
+        summary = self._make_summary(critical=1, high=2, medium=3, low=4, info=5)
+        expected_total = 1 + 2 + 3 + 4 + 5  # 15
+        print_summary_table(summary)
+        out = capsys.readouterr().out
+        total_line = [l for l in out.splitlines() if "TOTAL" in l]
+        assert total_line, "TOTAL row not found"
+        assert str(expected_total) in total_line[0]
+
+    def test_issues_found_status_when_count_nonzero(self, capsys):
+        """When count > 0, status label should indicate issues were found."""
+        print_summary_table(self._make_summary(high=1))
+        out = capsys.readouterr().out
+        assert "Issues Found" in out or "Issues" in out
+
+    def test_mixed_counts_all_appear(self, capsys):
+        """Each individual count value appears in output."""
+        print_summary_table(self._make_summary(critical=1, high=2, medium=3, low=4, info=5))
+        out = capsys.readouterr().out
+        for count in (1, 2, 3, 4, 5):
+            assert str(count) in out, f"Count {count} missing from summary table output"
+
+    # ── No side-effects ─────────────────────────────────────────────────────
+
+    def test_nothing_printed_to_stderr(self, capsys):
+        """print_summary_table must not write to stderr."""
+        print_summary_table(self._make_summary(critical=1))
+        captured = capsys.readouterr()
+        assert captured.err == ""
+
+    def test_output_ends_with_newline(self, capsys):
+        """Last character of output is a newline."""
+        print_summary_table(self._make_summary())
+        out = capsys.readouterr().out
+        assert out.endswith("\n")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 10. check_dependencies  (#28)
+# ═════════════════════════════════════════════════════════════════════════════
+class TestCheckDependenciesMocked:
+    """#28 — Use unittest.mock.patch to simulate missing tools and verify behavior."""
+
+    # ── Return type ─────────────────────────────────────────────────────────
+
+    def test_returns_tool_availability_instance(self):
+        """check_dependencies() always returns a ToolAvailability."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = type(
+                "R", (), {"returncode": 0, "stdout": b"", "stderr": b""}
+            )()
+            result = check_dependencies()
+        assert isinstance(result, ToolAvailability)
+
+    # ── Both tools available ─────────────────────────────────────────────────
+
+    def test_both_tools_available(self):
+        """When both subprocess calls succeed, yamllint and checkov are True."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = type(
+                "R", (), {"returncode": 0, "stdout": b"", "stderr": b""}
+            )()
+            result = check_dependencies()
+        assert result.yamllint is True
+        assert result.checkov is True
+
+    # ── yamllint missing ────────────────────────────────────────────────────
+
+    def test_yamllint_missing_raises_sys_exit(self):
+        """Missing yamllint causes sys.exit(1) (it is a required tool)."""
+        def fake_run(cmd, **kwargs):
+            if "yamllint" in " ".join(str(c) for c in cmd):
+                raise FileNotFoundError("yamllint not found")
+            return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
+
+        with patch("subprocess.run", side_effect=fake_run):
+            with pytest.raises(SystemExit) as exc_info:
+                check_dependencies()
+        assert exc_info.value.code == 1
+
+    def test_yamllint_missing_prints_critical_message(self, capsys):
+        """Missing yamllint prints a CRITICAL message before exiting."""
+        def fake_run(cmd, **kwargs):
+            if "yamllint" in " ".join(str(c) for c in cmd):
+                raise FileNotFoundError("yamllint not found")
+            return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
+
+        with patch("subprocess.run", side_effect=fake_run):
+            with pytest.raises(SystemExit):
+                check_dependencies()
+        out = capsys.readouterr().out
+        assert "yamllint" in out.lower() or "Missing" in out
+
+    def test_yamllint_timeout_raises_sys_exit(self):
+        """TimeoutExpired on yamllint check is treated as missing → sys.exit(1)."""
+        def fake_run(cmd, **kwargs):
+            if "yamllint" in " ".join(str(c) for c in cmd):
+                raise subprocess.TimeoutExpired(cmd=cmd, timeout=30)
+            return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
+
+        with patch("subprocess.run", side_effect=fake_run):
+            with pytest.raises(SystemExit) as exc_info:
+                check_dependencies()
+        assert exc_info.value.code == 1
+
+    # ── checkov missing (optional) ──────────────────────────────────────────
+
+    def test_checkov_missing_does_not_exit(self):
+        """Missing checkov should NOT call sys.exit — it is optional."""
+        def fake_run(cmd, **kwargs):
+            if "import checkov" in " ".join(str(c) for c in cmd):
+                raise FileNotFoundError("checkov not found")
+            return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
+
+        with patch("subprocess.run", side_effect=fake_run):
+            result = check_dependencies()  # must not raise
+        assert isinstance(result, ToolAvailability)
+
+    def test_checkov_missing_sets_checkov_false(self):
+        """When checkov import fails, returned tools.checkov is False."""
+        def fake_run(cmd, **kwargs):
+            if "import checkov" in " ".join(str(c) for c in cmd):
+                raise FileNotFoundError("checkov not found")
+            return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
+
+        with patch("subprocess.run", side_effect=fake_run):
+            result = check_dependencies()
+        assert result.checkov is False
+
+    def test_checkov_missing_yamllint_still_true(self):
+        """When only checkov is missing, yamllint remains True."""
+        def fake_run(cmd, **kwargs):
+            if "import checkov" in " ".join(str(c) for c in cmd):
+                raise FileNotFoundError("checkov not found")
+            return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
+
+        with patch("subprocess.run", side_effect=fake_run):
+            result = check_dependencies()
+        assert result.yamllint is True
+
+    def test_checkov_missing_prints_warning(self, capsys):
+        """Missing checkov prints a warning to stdout (not a fatal error)."""
+        def fake_run(cmd, **kwargs):
+            if "import checkov" in " ".join(str(c) for c in cmd):
+                raise FileNotFoundError("checkov not found")
+            return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
+
+        with patch("subprocess.run", side_effect=fake_run):
+            check_dependencies()
+        out = capsys.readouterr().out
+        assert "checkov" in out.lower()
+
+    def test_checkov_timeout_sets_checkov_false(self):
+        """TimeoutExpired on checkov import check is treated as unavailable."""
+        def fake_run(cmd, **kwargs):
+            if "import checkov" in " ".join(str(c) for c in cmd):
+                raise subprocess.TimeoutExpired(cmd=cmd, timeout=30)
+            return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
+
+        with patch("subprocess.run", side_effect=fake_run):
+            result = check_dependencies()
+        assert result.checkov is False
+
+    # ── CalledProcessError variants ──────────────────────────────────────────
+
+    def test_yamllint_called_process_error_raises_sys_exit(self):
+        """CalledProcessError from yamllint check triggers sys.exit(1)."""
+        def fake_run(cmd, **kwargs):
+            if "yamllint" in " ".join(str(c) for c in cmd):
+                raise subprocess.CalledProcessError(returncode=1, cmd=cmd)
+            return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
+
+        with patch("subprocess.run", side_effect=fake_run):
+            with pytest.raises(SystemExit) as exc_info:
+                check_dependencies()
+        assert exc_info.value.code == 1
+
+    def test_checkov_called_process_error_sets_false(self):
+        """CalledProcessError from checkov import check marks checkov=False."""
+        def fake_run(cmd, **kwargs):
+            if "import checkov" in " ".join(str(c) for c in cmd):
+                raise subprocess.CalledProcessError(returncode=1, cmd=cmd)
+            return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
+
+        with patch("subprocess.run", side_effect=fake_run):
+            result = check_dependencies()
+        assert result.checkov is False
