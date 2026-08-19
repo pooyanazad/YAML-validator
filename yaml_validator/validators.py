@@ -30,6 +30,23 @@ from yaml_validator.output import print_colored
 
 # ─────────────────────────────────────────────────────────────────────────────
 PYTHON_EXECUTABLE = sys.executable
+LARGE_FILE_WARNING_THRESHOLD = 1024 * 1024
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+def warn_if_large_file(file_path: str) -> None:
+    """Warn when security checks may be slow for a large YAML file."""
+    try:
+        file_size = os.path.getsize(file_path)
+    except OSError:
+        return
+
+    if file_size > LARGE_FILE_WARNING_THRESHOLD:
+        print_colored(
+            "Warning: large YAML file detected. Security checks may be slow; "
+            "use --no-security to skip them.",
+            Severity.MEDIUM,
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -279,6 +296,7 @@ def validate_yaml_file(
     file_path: str,
     tools: ToolAvailability = None,
     timeout: int = 300,
+    no_security: bool = False,
 ) -> ValidationResult:
     """Validate a YAML file using all available tools."""
     if tools is None:
@@ -286,6 +304,7 @@ def validate_yaml_file(
 
     print_colored(f"\n🔍 Validating: {file_path}", Severity.INFO, bold=True)
     print_colored("=" * 60, Severity.INFO)
+    warn_if_large_file(file_path)
 
     all_issues: List[ValidationIssue] = []
     syntax_valid = True
@@ -312,7 +331,9 @@ def validate_yaml_file(
         print_colored("✅ No linting issues found", Severity.INFO)
 
     # 3. Run checkov (if available)
-    if tools.checkov:
+    if no_security:
+        print_colored("\n⚠️  Security checks skipped (--no-security)", Severity.MEDIUM)
+    elif tools.checkov:
         print_colored("\n🔒 Running security checks (checkov)...", Severity.INFO)
         checkov_issues = run_checkov(file_path, timeout=timeout)
         all_issues.extend(checkov_issues)
@@ -343,6 +364,8 @@ def validate_yaml_file(
 
 
 __all__ = [
+    "LARGE_FILE_WARNING_THRESHOLD",
+    "warn_if_large_file",
     "validate_yaml_syntax",
     "run_yamllint",
     "run_checkov",
