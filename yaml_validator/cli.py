@@ -129,6 +129,10 @@ def main() -> None:
         '--timeout', type=int, default=300,
         help='Timeout in seconds for subprocess calls (default: 300)',
     )
+    parser.add_argument(
+        '--no-security', action='store_true',
+        help='Skip Checkov security checks',
+    )
 
     args = parser.parse_args()
 
@@ -145,7 +149,12 @@ def main() -> None:
     total_issues = 0
 
     for yaml_file in yaml_files:
-        result = validate_yaml_file(yaml_file, tools, timeout=args.timeout)
+        result = validate_yaml_file(
+            yaml_file,
+            tools,
+            timeout=args.timeout,
+            no_security=args.no_security,
+        )
         results.append(result)
 
         print_issues(result.issues)

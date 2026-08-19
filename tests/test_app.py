@@ -15,6 +15,10 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import app as validator
+from yaml_validator.validators import (
+    LARGE_FILE_WARNING_THRESHOLD,
+    warn_if_large_file,
+)
 from app import (
     validate_yaml_syntax,
     run_yamllint,
@@ -436,6 +440,24 @@ class TestValidateYamlFile:
         result = validate_yaml_file(clean_file)
         assert isinstance(result, ValidationResult)
 
+    def test_no_security_skips_checkov(self, clean_file):
+        tools = ToolAvailability(checkov=True)
+
+        with patch("yaml_validator.validators.run_checkov") as mock_run_checkov:
+            validate_yaml_file(clean_file, tools, no_security=True)
+
+        mock_run_checkov.assert_not_called()
+
+    def test_security_runs_by_default(self, clean_file):
+        tools = ToolAvailability(checkov=True)
+
+        with patch(
+            "yaml_validator.validators.run_checkov", return_value=[]
+        ) as mock_run_checkov:
+            validate_yaml_file(clean_file, tools)
+
+        mock_run_checkov.assert_called_once_with(clean_file, timeout=300)
+
     def test_yamllint_false_only_runs_syntax_and_security(self, tmp_yaml):
         """When tools.yamllint=False, validate_yaml_file skips yamllint."""
         # A file that has trailing-space linting issues but valid syntax
@@ -451,6 +473,87 @@ class TestValidateYamlFile:
         finally:
             os.unlink(path)
 
+
+class TestLargeFileWarning:
+
+    @pytest.mark.parametrize(
+        "file_size",
+        [LARGE_FILE_WARNING_THRESHOLD - 1, LARGE_FILE_WARNING_THRESHOLD],
+    )
+    def test_does_not_warn_at_or_below_threshold(self, file_size):
+        with (
+            patch("yaml_validator.validators.os.path.getsize", return_value=file_size),
+            patch("yaml_validator.validators.print_colored") as mock_print,
+        ):
+            warn_if_large_file("config.yaml")
+
+        mock_print.assert_not_called()
+
+    def test_warns_above_threshold(self):
+        with (
+            patch(
+                "yaml_validator.validators.os.path.getsize",
+                return_value=LARGE_FILE_WARNING_THRESHOLD + 1,
+            ),
+            patch("yaml_validator.validators.print_colored") as mock_print,
+        ):
+            warn_if_large_file("config.yaml")
+
+        message = mock_print.call_args.args[0]
+        assert "large YAML file" in message
+        assert "--no-security" in message
+
+    def test_ignores_file_size_errors(self):
+        with (
+            patch(
+                "yaml_validator.validators.os.path.getsize",
+                side_effect=OSError("unavailable"),
+            ),
+            patch("yaml_validator.validators.print_colored") as mock_print,
+        ):
+            warn_if_large_file("missing.yaml")
+
+        mock_print.assert_not_called()
+
+
+class TestCliSecurityOption:
+
+    def test_no_security_flag_is_passed_to_validator(self):
+        result = ValidationResult(
+            file_path="config.yaml",
+            syntax_valid=True,
+            issues=[],
+            summary={
+                "total": 0,
+                "critical": 0,
+                "high": 0,
+                "medium": 0,
+                "low": 0,
+                "info": 0,
+            },
+        )
+
+        with (
+            patch.object(sys, "argv", ["app.py", "config.yaml", "--no-security"]),
+            patch("yaml_validator.cli.resolve_files", return_value=["config.yaml"]),
+            patch(
+                "yaml_validator.cli.check_dependencies",
+                return_value=ToolAvailability(),
+            ),
+            patch(
+                "yaml_validator.cli.validate_yaml_file", return_value=result
+            ) as mock_validate,
+            pytest.raises(SystemExit) as exit_info,
+        ):
+            validator.main()
+
+        assert exit_info.value.code == 0
+        mock_validate.assert_called_once_with(
+            "config.yaml",
+            ToolAvailability(),
+            timeout=300,
+            no_security=True,
+        )
 
 # ═════════════════════════════════════════════════════════════════════════════
 # 5. ValidationIssue dataclass
