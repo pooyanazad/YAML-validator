@@ -448,6 +448,19 @@ class TestValidateYamlFile:
 
         mock_run_checkov.assert_not_called()
 
+    def test_no_security_skips_large_file_warning(self, clean_file, capsys):
+        tools = ToolAvailability(yamllint=False, checkov=False)
+
+        with patch(
+            "yaml_validator.validators.os.path.getsize",
+            return_value=LARGE_FILE_WARNING_THRESHOLD + 1,
+        ):
+            validate_yaml_file(clean_file, tools, no_security=True)
+
+        output = capsys.readouterr().out
+        assert "large YAML file detected" not in output
+        assert "Security checks skipped (--no-security)" in output
+
     def test_security_runs_by_default(self, clean_file):
         tools = ToolAvailability(checkov=True)
 
