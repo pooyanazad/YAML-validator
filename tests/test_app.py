@@ -1067,3 +1067,236 @@ class TestCheckDependenciesMocked:
         with patch("subprocess.run", side_effect=fake_run):
             result = check_dependencies()
         assert result.checkov is False
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 11. main() end-to-end — exit code 0  (#29)
+# ═════════════════════════════════════════════════════════════════════════════
+_PYTHON = str(Path(__file__).parent.parent / ".venv" / "bin" / "python")
+_APP    = str(Path(__file__).parent.parent / "app.py")
+_CLEAN  = str(FIXTURES / "test3_clean.yaml")
+_ISSUES = str(FIXTURES / "test1_issues.yaml")
+
+
+class TestMainEndToEnd:
+    """#29 — Call `python app.py <clean_file>` via subprocess and verify exit code 0."""
+
+    def _run(self, *args, timeout=60):
+        return subprocess.run(
+            [_PYTHON, _APP, *args],
+            capture_output=True, text=True, timeout=timeout,
+        )
+
+    def test_clean_file_exits_zero(self):
+        """Clean YAML file → exit code 0."""
+        result = self._run(_CLEAN)
+        assert result.returncode == 0, (
+            f"Expected exit 0 for clean file, got {result.returncode}\n"
+            f"stdout: {result.stdout[-500:]}\nstderr: {result.stderr[-200:]}"
+        )
+
+    def test_clean_file_stdout_contains_validation_passed(self):
+        """Output mentions successful validation."""
+        result = self._run(_CLEAN)
+        combined = result.stdout + result.stderr
+        assert any(word in combined for word in ("passed", "Clean", "successfully")), (
+            f"Expected success indicator in output. stdout: {result.stdout[-300:]}"
+        )
+
+    def test_clean_file_no_critical_in_output(self):
+        """Clean file output should not mention CRITICAL issues."""
+        result = self._run(_CLEAN)
+        assert "CRITICAL" not in result.stdout or "0" in result.stdout
+
+    def test_nonexistent_file_exits_nonzero(self):
+        """Passing a nonexistent file should exit with a non-zero code."""
+        result = self._run("/nonexistent/totally_fake.yaml")
+        assert result.returncode != 0
+
+    def test_output_contains_file_path(self):
+        """Output should mention the file being validated."""
+        result = self._run(_CLEAN)
+        assert "test3_clean" in result.stdout or "test3_clean" in result.stderr
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 12. main() exit code 1  (#30)
+# ═════════════════════════════════════════════════════════════════════════════
+class TestMainExitCode1:
+    """#30 — Call `python app.py <issues_file>` via subprocess and verify exit code 1."""
+
+    def _run(self, *args, timeout=60):
+        return subprocess.run(
+            [_PYTHON, _APP, *args],
+            capture_output=True, text=True, timeout=timeout,
+        )
+
+    def test_issues_file_exits_one(self):
+        """File with CRITICAL/HIGH issues → exit code 1."""
+        result = self._run(_ISSUES)
+        assert result.returncode == 1, (
+            f"Expected exit 1 for issues file, got {result.returncode}\n"
+            f"stdout: {result.stdout[-500:]}"
+        )
+
+    def test_issues_file_output_mentions_failed(self):
+        """Output should mention failure or issues found."""
+        result = self._run(_ISSUES)
+        combined = result.stdout + result.stderr
+        assert any(word in combined for word in ("failed", "Issues Found", "CRITICAL", "HIGH")), (
+            f"Expected failure indicators in output. stdout: {result.stdout[-300:]}"
+        )
+
+    def test_issues_file_stdout_not_empty(self):
+        """There should be some output when issues exist."""
+        result = self._run(_ISSUES)
+        assert len(result.stdout.strip()) > 0
+
+    def test_exit_code_differs_between_clean_and_issues(self):
+        """Exit codes for a clean vs. issues file must differ."""
+        clean_result  = subprocess.run([_PYTHON, _APP, _CLEAN],  capture_output=True, timeout=60)
+        issues_result = subprocess.run([_PYTHON, _APP, _ISSUES], capture_output=True, timeout=60)
+        assert clean_result.returncode != issues_result.returncode, (
+            "Clean and issues files should produce different exit codes"
+        )
+
+    def test_second_issues_file_also_exits_one(self):
+        """A different issues fixture also produces exit code 1."""
+        issues2 = str(FIXTURES / "test2_issues.yaml")
+        result = self._run(issues2)
+        assert result.returncode == 1
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 13. --help and --version flags  (#31)
+# ═════════════════════════════════════════════════════════════════════════════
+class TestHelpVersionFlags:
+    """#31 — Verify --help and --version print expected output and exit 0."""
+
+    def _run(self, *args, timeout=10):
+        return subprocess.run(
+            [_PYTHON, _APP, *args],
+            capture_output=True, text=True, timeout=timeout,
+        )
+
+    # ── --version ────────────────────────────────────────────────────────────
+
+    def test_version_exits_zero(self):
+        """--version exits with code 0."""
+        result = self._run("--version")
+        assert result.returncode == 0, f"--version exit code: {result.returncode}"
+
+    def test_version_prints_version_number(self):
+        """--version output contains a version number (digits and dots)."""
+        import re
+        result = self._run("--version")
+        combined = result.stdout + result.stderr
+        assert re.search(r"\d+\.\d+", combined), (
+            f"No version number found in: {combined!r}"
+        )
+
+    def test_version_output_contains_program_name(self):
+        """--version output contains the program name."""
+        result = self._run("--version")
+        combined = result.stdout + result.stderr
+        assert "yaml-validator" in combined.lower() or "yaml_validator" in combined.lower(), (
+            f"Program name missing from --version output: {combined!r}"
+        )
+
+    # ── --help ───────────────────────────────────────────────────────────────
+
+    def test_help_exits_zero(self):
+        """--help exits with code 0."""
+        result = self._run("--help")
+        assert result.returncode == 0, f"--help exit code: {result.returncode}"
+
+    def test_help_prints_usage(self):
+        """--help output contains 'usage' (case-insensitive)."""
+        result = self._run("--help")
+        combined = result.stdout + result.stderr
+        assert "usage" in combined.lower(), f"'usage' missing from --help output: {combined[:300]!r}"
+
+    def test_help_mentions_file_argument(self):
+        """--help describes the FILE positional argument."""
+        result = self._run("--help")
+        combined = result.stdout + result.stderr
+        assert "FILE" in combined or "file" in combined.lower()
+
+    def test_help_mentions_timeout_flag(self):
+        """--help describes the --timeout flag."""
+        result = self._run("--help")
+        assert "--timeout" in result.stdout + result.stderr
+
+    def test_help_mentions_version_flag(self):
+        """--help lists --version as an option."""
+        result = self._run("--help")
+        assert "--version" in result.stdout + result.stderr
+
+    def test_help_output_not_empty(self):
+        """--help produces non-empty output."""
+        result = self._run("--help")
+        assert len((result.stdout + result.stderr).strip()) > 0
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 14. Multi-file combined summary  (#32)
+# ═════════════════════════════════════════════════════════════════════════════
+class TestMultiFileSummary:
+    """#32 — Run app with 2+ files and verify combined summary output."""
+
+    def _run(self, *args, timeout=120):
+        return subprocess.run(
+            [_PYTHON, _APP, *args],
+            capture_output=True, text=True, timeout=timeout,
+        )
+
+    def test_two_files_shows_files_scanned(self):
+        """Running with 2 files produces 'Files scanned' in output."""
+        result = self._run(_CLEAN, _ISSUES)
+        assert "Files scanned" in result.stdout, (
+            f"'Files scanned' not found in output:\n{result.stdout[-500:]}"
+        )
+
+    def test_files_scanned_count_is_two(self):
+        """'Files scanned: 2' appears when exactly 2 files are passed."""
+        result = self._run(_CLEAN, _ISSUES)
+        assert "Files scanned: 2" in result.stdout, (
+            f"Expected 'Files scanned: 2', got:\n{result.stdout[-500:]}"
+        )
+
+    def test_three_files_shows_count_three(self):
+        """Passing 3 files reports 'Files scanned: 3'."""
+        issues2 = str(FIXTURES / "test2_issues.yaml")
+        result = self._run(_CLEAN, _ISSUES, issues2)
+        assert "Files scanned: 3" in result.stdout, (
+            f"Expected 'Files scanned: 3', got:\n{result.stdout[-500:]}"
+        )
+
+    def test_combined_results_header_present(self):
+        """'Combined Results' section header appears for multi-file runs."""
+        result = self._run(_CLEAN, _ISSUES)
+        assert "Combined Results" in result.stdout or "combined" in result.stdout.lower()
+
+    def test_total_issues_line_present(self):
+        """'Total issues' line is printed in the combined summary."""
+        result = self._run(_CLEAN, _ISSUES)
+        assert "Total issues" in result.stdout, (
+            f"'Total issues' not found:\n{result.stdout[-500:]}"
+        )
+
+    def test_single_file_no_combined_section(self):
+        """With only 1 file, 'Files scanned' should NOT appear (no combined section)."""
+        result = self._run(_CLEAN)
+        assert "Files scanned" not in result.stdout
+
+    def test_multi_file_exit_code_reflects_issues(self):
+        """When at least one file has CRITICAL/HIGH issues, exit code is 1."""
+        result = self._run(_CLEAN, _ISSUES)
+        assert result.returncode == 1
+
+    def test_multi_file_both_paths_in_output(self):
+        """Both file paths are mentioned somewhere in the output."""
+        result = self._run(_CLEAN, _ISSUES)
+        assert "test3_clean" in result.stdout
+        assert "test1_issues" in result.stdout
+
