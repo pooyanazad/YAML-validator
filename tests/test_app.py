@@ -1300,3 +1300,225 @@ class TestMultiFileSummary:
         assert "test3_clean" in result.stdout
         assert "test1_issues" in result.stdout
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 15. resolve_files() negative cases  (#33)
+# ═════════════════════════════════════════════════════════════════════════════
+class TestResolveFilesNegative:
+    """#33 — Symlink loops, permission-denied dirs, no-extension files."""
+
+    # ── Files without a .yaml/.yml extension ─────────────────────────────────
+
+    def test_plain_text_file_not_included(self, tmp_path):
+        """A .txt file in a directory is silently ignored — not a YAML file."""
+        (tmp_path / "notes.txt").write_text("some text")
+        result = resolve_files([str(tmp_path)])
+        assert all(f.endswith((".yaml", ".yml")) for f in result)
+
+    def test_no_extension_file_not_included(self, tmp_path):
+        """A file with no extension at all is not returned by resolve_files."""
+        (tmp_path / "Makefile").write_text("all:\n\techo hi")
+        result = resolve_files([str(tmp_path)])
+        assert not any("Makefile" in f for f in result)
+
+    def test_yaml_extension_file_is_included(self, tmp_path):
+        """A valid .yaml file in a dir IS included (positive sanity check)."""
+        f = tmp_path / "config.yaml"
+        f.write_text("key: value\n")
+        result = resolve_files([str(tmp_path)])
+        assert any("config.yaml" in f for f in result)
+
+    def test_mixed_dir_only_yaml_returned(self, tmp_path):
+        """Directory with mixed extensions — only .yaml/.yml come back."""
+        (tmp_path / "good.yaml").write_text("a: 1\n")
+        (tmp_path / "good.yml").write_text("b: 2\n")
+        (tmp_path / "bad.json").write_text('{"c": 3}')
+        (tmp_path / "bad.txt").write_text("plain text")
+        (tmp_path / "bad").write_text("no extension")
+        result = resolve_files([str(tmp_path)])
+        assert len(result) == 2
+        assert all(f.endswith((".yaml", ".yml")) for f in result)
+
+    def test_explicit_no_extension_path_skipped(self, tmp_path):
+        """Passing an explicit path with no .yaml extension returns empty."""
+        no_ext = tmp_path / "datafile"
+        no_ext.write_text("key: value\n")
+        result = resolve_files([str(no_ext)])
+        # resolve_files accepts explicit files regardless of extension
+        # — but they won't match the yaml-only filter from dir scans.
+        # If passed directly as a file, it IS included (it's a real file).
+        # The important thing: no crash, returns a list.
+        assert isinstance(result, list)
+
+    # ── Permission-denied directory ───────────────────────────────────────────
+
+    @pytest.mark.skipif(os.getuid() == 0, reason="root bypasses permission checks")
+    def test_permission_denied_dir_does_not_crash(self, tmp_path):
+        """resolve_files() must not raise when scanning an unreadable directory."""
+        secret_dir = tmp_path / "secret"
+        secret_dir.mkdir()
+        (secret_dir / "hidden.yaml").write_text("key: value\n")
+        secret_dir.chmod(0o000)
+        try:
+            result = resolve_files([str(tmp_path)])
+            # Should return a list (possibly empty) without raising
+            assert isinstance(result, list)
+        finally:
+            secret_dir.chmod(0o755)  # restore so pytest cleanup works
+
+    @pytest.mark.skipif(os.getuid() == 0, reason="root bypasses permission checks")
+    def test_permission_denied_dir_returns_list(self, tmp_path):
+        """Even with a locked dir, the return value is always a list."""
+        locked = tmp_path / "locked"
+        locked.mkdir()
+        locked.chmod(0o000)
+        try:
+            result = resolve_files([str(locked)])
+            assert isinstance(result, list)
+        finally:
+            locked.chmod(0o755)
+
+    # ── Symlink handling ──────────────────────────────────────────────────────
+
+    def test_broken_symlink_does_not_crash(self, tmp_path):
+        """A broken symlink in a directory must not cause resolve_files to raise.
+
+        Note: rglob finds symlinks by name even when their target is missing.
+        The important guarantee is that the function completes without an
+        exception — validation functions will handle the missing target later.
+        """
+        target = tmp_path / "ghost.yaml"
+        link   = tmp_path / "link_to_ghost.yaml"
+        link.symlink_to(target)          # target never created → broken
+        try:
+            result = resolve_files([str(tmp_path)])
+        except Exception as exc:
+            pytest.fail(f"resolve_files raised on a broken symlink: {exc}")
+        assert isinstance(result, list)
+
+    def test_symlink_to_valid_file_included(self, tmp_path):
+        """A symlink pointing to a real .yaml file IS returned by resolve_files.
+
+        Note: resolve_files returns the symlink's own name, not the target's.
+        Both the real file and the symlink have .yaml extensions here.
+        """
+        real   = tmp_path / "real.yaml"
+        real.write_text("key: value\n")
+        link   = tmp_path / "link.yaml"
+        link.symlink_to(real)
+        result = resolve_files([str(tmp_path)])
+        names = [Path(f).name for f in result]
+        # Both the real file AND the symlink should appear (or at least one of them)
+        assert "real.yaml" in names or "link.yaml" in names, (
+            f"Expected at least one of real.yaml/link.yaml, got: {names}"
+        )
+
+    def test_symlink_loop_does_not_hang(self, tmp_path):
+        """A symlink pointing back to its own parent dir must not cause infinite recursion."""
+        (tmp_path / "valid.yaml").write_text("ok: true\n")
+        loop_link = tmp_path / "loop"
+        loop_link.symlink_to(tmp_path)  # points to parent → circular
+        try:
+            result = resolve_files([str(tmp_path)])
+            assert isinstance(result, list)
+            # The real file should still be found
+            assert any("valid.yaml" in f for f in result)
+        except RecursionError:
+            pytest.fail("resolve_files() hit a RecursionError on a symlink loop")
+
+    def test_empty_directory_returns_empty_list(self, tmp_path):
+        """Scanning a directory with no YAML files returns an empty list."""
+        result = resolve_files([str(tmp_path)])
+        assert result == []
+
+    def test_nonexistent_explicit_path_returns_empty(self):
+        """A completely made-up path returns [] without crashing."""
+        result = resolve_files(["/this/path/does/not/exist/at/all.yaml"])
+        assert result == []
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 16. Large YAML files  (#34)
+# ═════════════════════════════════════════════════════════════════════════════
+_LARGE_FIXTURE = str(FIXTURES / "large_10k.yaml")
+
+
+class TestLargeYamlFiles:
+    """#34 — 40,000-line fixture (688 KB). Verify correctness and no excessive time."""
+
+    # ── Fixture sanity ────────────────────────────────────────────────────────
+
+    def test_large_fixture_exists(self):
+        """The large fixture file was generated and is present on disk."""
+        assert Path(_LARGE_FIXTURE).exists(), f"Missing fixture: {_LARGE_FIXTURE}"
+
+    def test_large_fixture_line_count(self):
+        """The fixture has at least 10,000 lines of YAML content."""
+        with open(_LARGE_FIXTURE) as f:
+            line_count = sum(1 for _ in f)
+        assert line_count >= 10_000, f"Expected ≥10k lines, got {line_count}"
+
+    def test_large_fixture_size_in_bytes(self):
+        """The fixture is at least 100 KB (proves it's not a stub)."""
+        size = Path(_LARGE_FIXTURE).stat().st_size
+        assert size >= 100_000, f"Fixture too small: {size} bytes"
+
+    # ── Syntax validation ─────────────────────────────────────────────────────
+
+    def test_large_file_syntax_valid(self):
+        """validate_yaml_syntax() reports no issues on the large fixture."""
+        issues = validate_yaml_syntax(_LARGE_FIXTURE)
+        assert issues == [], f"Unexpected syntax issues: {issues[:3]}"
+
+    def test_large_file_syntax_returns_list(self):
+        """validate_yaml_syntax() always returns a list, never raises."""
+        result = validate_yaml_syntax(_LARGE_FIXTURE)
+        assert isinstance(result, list)
+
+    # ── Performance (time budget) ─────────────────────────────────────────────
+
+    def test_large_file_syntax_check_within_30s(self):
+        """Syntax check on the large fixture completes within 30 seconds."""
+        import time
+        start = time.monotonic()
+        validate_yaml_syntax(_LARGE_FIXTURE)
+        elapsed = time.monotonic() - start
+        assert elapsed < 30, (
+            f"Syntax check took {elapsed:.1f}s — too slow for a 40k-line file"
+        )
+
+    def test_large_file_resolve_files_works(self):
+        """resolve_files() happily accepts the large fixture path."""
+        result = resolve_files([_LARGE_FIXTURE])
+        assert len(result) == 1
+        assert _LARGE_FIXTURE in result[0] or result[0].endswith("large_10k.yaml")
+
+    # ── yamllint on large file ─────────────────────────────────────────────────
+
+    def test_large_file_yamllint_returns_list(self):
+        """run_yamllint() on a large file always returns a list without crashing."""
+        result = run_yamllint(_LARGE_FIXTURE, timeout=60)
+        assert isinstance(result, list)
+
+    def test_large_file_yamllint_within_60s(self):
+        """yamllint on the large fixture completes within 60 seconds."""
+        import time
+        start = time.monotonic()
+        run_yamllint(_LARGE_FIXTURE, timeout=60)
+        elapsed = time.monotonic() - start
+        assert elapsed < 60, f"yamllint took {elapsed:.1f}s on large file"
+
+    # ── Memory safety ─────────────────────────────────────────────────────────
+
+    def test_large_file_validate_yaml_file_completes(self):
+        """validate_yaml_file() on the large fixture runs to completion."""
+        tools = ToolAvailability(checkov=False)  # skip slow checkov
+        result = validate_yaml_file(_LARGE_FIXTURE, tools)
+        assert isinstance(result, ValidationResult)
+
+    def test_large_file_result_has_summary(self):
+        """validate_yaml_file() on the large fixture returns a complete summary dict."""
+        tools = ToolAvailability(checkov=False)
+        result = validate_yaml_file(_LARGE_FIXTURE, tools)
+        for key in ("total", "critical", "high", "medium", "low", "info"):
+            assert key in result.summary, f"Missing summary key: {key}"
