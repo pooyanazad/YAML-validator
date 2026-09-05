@@ -1,0 +1,24 @@
+# Ruff configuration for YAML Validator
+# https://docs.astral.sh/ruff/
+
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "I", "SIM", "PL", "BLE"]
+ignore = [
+    "SIM115",   # NamedTemporaryFile with delete=False cannot use context manager pattern
+    "BLE001",   # Broad exception catches are intentional in validators as catch-all safety nets
+]
+
+[lint.per-file-ignores]
+"tests/*" = [
+    "PLW1510",  # subprocess.run without check= is fine in tests — we inspect returncode manually
+    "PLR2004",  # Magic values in test assertions are standard practice
+    "PLC0415",  # Imports inside test functions are common for optional/scoped deps
+    "E501",     # Long comments/lines in tests are acceptable for readability
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"

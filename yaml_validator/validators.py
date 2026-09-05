@@ -16,7 +16,6 @@ import os
 import re
 import subprocess
 import sys
-from typing import List
 
 import yaml
 
@@ -50,52 +49,60 @@ def warn_if_large_file(file_path: str) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
+def validate_yaml_syntax(file_path: str) -> list[ValidationIssue]:
     """Validate YAML syntax using PyYAML."""
-    issues: List[ValidationIssue] = []
+    issues: list[ValidationIssue] = []
 
     # Check file existence and read permission before opening
     if not os.path.exists(file_path):
-        return [ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=f"File not found: {file_path}",
-            file_path=file_path,
-        )]
+        return [
+            ValidationIssue(
+                tool="yaml",
+                severity=Severity.CRITICAL,
+                message=f"File not found: {file_path}",
+                file_path=file_path,
+            )
+        ]
     if not os.access(file_path, os.R_OK):
-        return [ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=f"Permission denied: {file_path}",
-            file_path=file_path,
-        )]
+        return [
+            ValidationIssue(
+                tool="yaml",
+                severity=Severity.CRITICAL,
+                message=f"Permission denied: {file_path}",
+                file_path=file_path,
+            )
+        ]
 
     # #14 — Detect binary files early by sniffing for null bytes.
     # Avoids a confusing UnicodeDecodeError later; report as MEDIUM warning.
     try:
-        with open(file_path, 'rb') as raw:
+        with open(file_path, "rb") as raw:
             chunk = raw.read(8192)
-        if b'\x00' in chunk:
-            return [ValidationIssue(
-                tool="yaml",
-                severity=Severity.MEDIUM,
-                message=(
-                    f"File appears to be binary (contains null bytes): {file_path}. "
-                    "Rename or remove the file — it cannot be validated as YAML."
-                ),
-                rule="binary-file",
-                file_path=file_path,
-            )]
+        if b"\x00" in chunk:
+            return [
+                ValidationIssue(
+                    tool="yaml",
+                    severity=Severity.MEDIUM,
+                    message=(
+                        f"File appears to be binary (contains null bytes): {file_path}. "
+                        "Rename or remove the file — it cannot be validated as YAML."
+                    ),
+                    rule="binary-file",
+                    file_path=file_path,
+                )
+            ]
     except OSError as e:
-        return [ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=f"File reading error: {str(e)}",
-            file_path=file_path,
-        )]
+        return [
+            ValidationIssue(
+                tool="yaml",
+                severity=Severity.CRITICAL,
+                message=f"File reading error: {e!s}",
+                file_path=file_path,
+            )
+        ]
 
     try:
-        with open(file_path, 'r', encoding='utf-8') as file:
+        with open(file_path, "r", encoding="utf-8") as file:
             # Use safe_load_all to handle multiple documents
             documents = list(yaml.safe_load_all(file))
 
@@ -104,189 +111,229 @@ def validate_yaml_syntax(file_path: str) -> List[ValidationIssue]:
         # files, and [None] for files that contain an explicit null document.
         # Neither case contains meaningful data — report as INFO.
         if not documents or all(doc is None for doc in documents):
-            issues.append(ValidationIssue(
-                tool="yaml",
-                severity=Severity.INFO,
-                message="File is empty or contains only whitespace/comments.",
-                rule="empty-file",
-                file_path=file_path,
-            ))
+            issues.append(
+                ValidationIssue(
+                    tool="yaml",
+                    severity=Severity.INFO,
+                    message="File is empty or contains only whitespace/comments.",
+                    rule="empty-file",
+                    file_path=file_path,
+                )
+            )
     except yaml.YAMLError as e:
-        mark = getattr(e, 'problem_mark', None)
+        mark = getattr(e, "problem_mark", None)
         line_num = mark.line + 1 if mark else None
         column_num = mark.column + 1 if mark else None
-        issues.append(ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=str(e),
-            line=line_num,
-            column=column_num,
-            rule="syntax",
-            file_path=file_path,
-        ))
+        issues.append(
+            ValidationIssue(
+                tool="yaml",
+                severity=Severity.CRITICAL,
+                message=str(e),
+                line=line_num,
+                column=column_num,
+                rule="syntax",
+                file_path=file_path,
+            )
+        )
     except FileNotFoundError:
-        issues.append(ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=f"File not found: {file_path}",
-            file_path=file_path,
-        ))
+        issues.append(
+            ValidationIssue(
+                tool="yaml",
+                severity=Severity.CRITICAL,
+                message=f"File not found: {file_path}",
+                file_path=file_path,
+            )
+        )
     except PermissionError:
-        issues.append(ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=f"Permission denied: {file_path}",
-            file_path=file_path,
-        ))
+        issues.append(
+            ValidationIssue(
+                tool="yaml",
+                severity=Severity.CRITICAL,
+                message=f"Permission denied: {file_path}",
+                file_path=file_path,
+            )
+        )
     except UnicodeDecodeError as e:
-        issues.append(ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=f"File encoding error (not valid UTF-8): {str(e)}",
-            file_path=file_path,
-        ))
+        issues.append(
+            ValidationIssue(
+                tool="yaml",
+                severity=Severity.CRITICAL,
+                message=f"File encoding error (not valid UTF-8): {e!s}",
+                file_path=file_path,
+            )
+        )
     except OSError as e:
-        issues.append(ValidationIssue(
-            tool="yaml",
-            severity=Severity.CRITICAL,
-            message=f"File reading error: {str(e)}",
-            file_path=file_path,
-        ))
+        issues.append(
+            ValidationIssue(
+                tool="yaml",
+                severity=Severity.CRITICAL,
+                message=f"File reading error: {e!s}",
+                file_path=file_path,
+            )
+        )
 
     return issues
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-def run_yamllint(file_path: str, timeout: int = 300) -> List[ValidationIssue]:
+def run_yamllint(file_path: str, timeout: int = 300) -> list[ValidationIssue]:
     """Run yamllint and parse results."""
-    issues: List[ValidationIssue] = []
+    issues: list[ValidationIssue] = []
     pattern = re.compile(r"^(.+?):(\d+):(\d+): \[([^\]]+)\] (.+?)(?: \(([^)]+)\))?$")
 
     try:
         result = subprocess.run(
-            [PYTHON_EXECUTABLE, '-m', 'yamllint', '-f', 'parsable', file_path],
+            [PYTHON_EXECUTABLE, "-m", "yamllint", "-f", "parsable", file_path],
             capture_output=True,
             text=True,
             timeout=timeout,
+            check=False,
         )
 
         if result.returncode != 0 and "No module named yamllint" in result.stderr:
-            issues.append(ValidationIssue(
-                tool="yamllint",
-                severity=Severity.HIGH,
-                message="yamllint is not installed or not available in the Python environment.",
-                file_path=file_path,
-            ))
+            issues.append(
+                ValidationIssue(
+                    tool="yamllint",
+                    severity=Severity.HIGH,
+                    message="yamllint is not installed or not available in the Python environment.",
+                    file_path=file_path,
+                )
+            )
             return issues
 
-        for line in result.stdout.strip().split('\n'):
+        for line in result.stdout.strip().split("\n"):
             if line.strip():
                 match = pattern.match(line)
                 if match:
                     _parsed_file, line_num, col_num, level, message, rule = match.groups()
-                    severity = Severity.MEDIUM if level == 'error' else Severity.LOW
-                    issues.append(ValidationIssue(
-                        tool="yamllint",
-                        severity=severity,
-                        message=message.strip(),
-                        line=int(line_num),
-                        column=int(col_num),
-                        rule=rule or level,
-                        file_path=file_path,
-                    ))
+                    severity = Severity.MEDIUM if level == "error" else Severity.LOW
+                    issues.append(
+                        ValidationIssue(
+                            tool="yamllint",
+                            severity=severity,
+                            message=message.strip(),
+                            line=int(line_num),
+                            column=int(col_num),
+                            rule=rule or level,
+                            file_path=file_path,
+                        )
+                    )
                 else:
                     # Fallback for unexpected format
-                    issues.append(ValidationIssue(
-                        tool="yamllint",
-                        severity=Severity.MEDIUM,
-                        message=line.strip(),
-                        file_path=file_path,
-                    ))
+                    issues.append(
+                        ValidationIssue(
+                            tool="yamllint",
+                            severity=Severity.MEDIUM,
+                            message=line.strip(),
+                            file_path=file_path,
+                        )
+                    )
 
     except subprocess.TimeoutExpired:
-        issues.append(ValidationIssue(
-            tool="yamllint",
-            severity=Severity.HIGH,
-            message=f"yamllint execution timed out after {timeout} seconds.",
-            file_path=file_path,
-        ))
-    except Exception as e:
-        issues.append(ValidationIssue(
-            tool="yamllint",
-            severity=Severity.HIGH,
-            message=f"yamllint execution failed: {str(e)}",
-            file_path=file_path,
-        ))
+        issues.append(
+            ValidationIssue(
+                tool="yamllint",
+                severity=Severity.HIGH,
+                message=f"yamllint execution timed out after {timeout} seconds.",
+                file_path=file_path,
+            )
+        )
+    except OSError as e:
+        issues.append(
+            ValidationIssue(
+                tool="yamllint",
+                severity=Severity.HIGH,
+                message=f"yamllint execution failed: {e!s}",
+                file_path=file_path,
+            )
+        )
 
     return issues
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-def run_checkov(file_path: str, timeout: int = 300) -> List[ValidationIssue]:
+def run_checkov(file_path: str, timeout: int = 300) -> list[ValidationIssue]:
     """Run checkov and parse results."""
-    issues: List[ValidationIssue] = []
+    issues: list[ValidationIssue] = []
 
     try:
         result = subprocess.run(
-            [PYTHON_EXECUTABLE, '-m', 'checkov.main', '-f', file_path, '--output', 'json'],
+            [
+                PYTHON_EXECUTABLE,
+                "-m",
+                "checkov.main",
+                "-f",
+                file_path,
+                "--output",
+                "json",
+            ],
             capture_output=True,
             text=True,
             timeout=timeout,
+            check=False,
         )
 
         if result.stdout.strip():
             try:
                 data = json.loads(result.stdout)
 
-                for check in data.get('results', {}).get('failed_checks', []):
+                for check in data.get("results", {}).get("failed_checks", []):
                     severity = Severity.HIGH
-                    if check.get('severity'):
+                    if check.get("severity"):
                         severity_map = {
-                            'CRITICAL': Severity.CRITICAL,
-                            'HIGH': Severity.HIGH,
-                            'MEDIUM': Severity.MEDIUM,
-                            'LOW': Severity.LOW,
+                            "CRITICAL": Severity.CRITICAL,
+                            "HIGH": Severity.HIGH,
+                            "MEDIUM": Severity.MEDIUM,
+                            "LOW": Severity.LOW,
                         }
                         severity = severity_map.get(
-                            check.get('severity', 'HIGH').upper(),
+                            check.get("severity", "HIGH").upper(),
                             Severity.HIGH,
                         )
 
                     line_num = None
-                    if check.get('file_line_range') and len(check['file_line_range']) > 0:
-                        line_num = check['file_line_range'][0]
+                    if check.get("file_line_range") and len(check["file_line_range"]) > 0:
+                        line_num = check["file_line_range"][0]
 
-                    issues.append(ValidationIssue(
-                        tool="checkov",
-                        severity=severity,
-                        message=check.get('check_name', 'Security check failed'),
-                        line=line_num,
-                        rule=check.get('check_id', ''),
-                        file_path=file_path,
-                    ))
+                    issues.append(
+                        ValidationIssue(
+                            tool="checkov",
+                            severity=severity,
+                            message=check.get("check_name", "Security check failed"),
+                            line=line_num,
+                            rule=check.get("check_id", ""),
+                            file_path=file_path,
+                        )
+                    )
 
             except json.JSONDecodeError as e:
-                issues.append(ValidationIssue(
-                    tool="checkov",
-                    severity=Severity.MEDIUM,
-                    message=f"Failed to parse checkov output: {str(e)}",
-                    file_path=file_path,
-                ))
+                issues.append(
+                    ValidationIssue(
+                        tool="checkov",
+                        severity=Severity.MEDIUM,
+                        message=f"Failed to parse checkov output: {e!s}",
+                        file_path=file_path,
+                    )
+                )
 
     except subprocess.TimeoutExpired:
-        issues.append(ValidationIssue(
-            tool="checkov",
-            severity=Severity.HIGH,
-            message=f"checkov execution timed out after {timeout} seconds.",
-            file_path=file_path,
-        ))
-    except Exception as e:
-        issues.append(ValidationIssue(
-            tool="checkov",
-            severity=Severity.HIGH,
-            message=f"checkov execution failed: {str(e)}",
-            file_path=file_path,
-        ))
+        issues.append(
+            ValidationIssue(
+                tool="checkov",
+                severity=Severity.HIGH,
+                message=f"checkov execution timed out after {timeout} seconds.",
+                file_path=file_path,
+            )
+        )
+    except OSError as e:
+        issues.append(
+            ValidationIssue(
+                tool="checkov",
+                severity=Severity.HIGH,
+                message=f"checkov execution failed: {e!s}",
+                file_path=file_path,
+            )
+        )
 
     return issues
 
@@ -294,7 +341,7 @@ def run_checkov(file_path: str, timeout: int = 300) -> List[ValidationIssue]:
 # ─────────────────────────────────────────────────────────────────────────────
 def validate_yaml_file(
     file_path: str,
-    tools: ToolAvailability = None,
+    tools: ToolAvailability | None = None,
     timeout: int = 300,
     no_security: bool = False,
 ) -> ValidationResult:
@@ -307,7 +354,7 @@ def validate_yaml_file(
     if not no_security:
         warn_if_large_file(file_path)
 
-    all_issues: List[ValidationIssue] = []
+    all_issues: list[ValidationIssue] = []
     syntax_valid = True
 
     # 1. Check YAML syntax
@@ -348,12 +395,12 @@ def validate_yaml_file(
 
     # Generate summary
     summary = {
-        'total': len(all_issues),
-        'critical': len([i for i in all_issues if i.severity == Severity.CRITICAL]),
-        'high': len([i for i in all_issues if i.severity == Severity.HIGH]),
-        'medium': len([i for i in all_issues if i.severity == Severity.MEDIUM]),
-        'low': len([i for i in all_issues if i.severity == Severity.LOW]),
-        'info': len([i for i in all_issues if i.severity == Severity.INFO]),
+        "total": len(all_issues),
+        "critical": len([i for i in all_issues if i.severity == Severity.CRITICAL]),
+        "high": len([i for i in all_issues if i.severity == Severity.HIGH]),
+        "medium": len([i for i in all_issues if i.severity == Severity.MEDIUM]),
+        "low": len([i for i in all_issues if i.severity == Severity.LOW]),
+        "info": len([i for i in all_issues if i.severity == Severity.INFO]),
     }
 
     return ValidationResult(
@@ -366,9 +413,9 @@ def validate_yaml_file(
 
 __all__ = [
     "LARGE_FILE_WARNING_THRESHOLD",
-    "warn_if_large_file",
-    "validate_yaml_syntax",
-    "run_yamllint",
     "run_checkov",
+    "run_yamllint",
     "validate_yaml_file",
+    "validate_yaml_syntax",
+    "warn_if_large_file",
 ]

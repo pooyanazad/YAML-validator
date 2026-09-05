@@ -3,41 +3,42 @@ App functionality tests for YAML Validator.
 Tests core functions directly (no Docker required).
 Run with: pytest tests/test_app.py -v
 """
-import sys
+
 import os
-import pytest
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
-import subprocess
 from unittest.mock import patch
+
+import pytest
 
 # Make app importable from project root
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import app as validator
+from app import (
+    Severity,
+    ToolAvailability,
+    ValidationIssue,
+    ValidationResult,
+    check_dependencies,
+    print_colored,
+    print_issues,
+    print_summary_table,
+    resolve_files,
+    run_checkov,
+    run_yamllint,
+    validate_yaml_file,
+    validate_yaml_syntax,
+)
 from yaml_validator.validators import (
     LARGE_FILE_WARNING_THRESHOLD,
     warn_if_large_file,
 )
-from app import (
-    validate_yaml_syntax,
-    run_yamllint,
-    run_checkov,
-    resolve_files,
-    validate_yaml_file,
-    check_dependencies,
-    ValidationIssue,
-    ValidationResult,
-    Severity,
-    ToolAvailability,
-    print_colored,
-    print_issues,
-    print_summary_table,
-)
-
 
 # ─────────────────────────────────────────────────────────────────────────────
-FIXTURES = Path(__file__).parent / "fixtures"   # tests/fixtures directory
+FIXTURES = Path(__file__).parent / "fixtures"  # tests/fixtures directory
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -53,7 +54,6 @@ def tmp_yaml(content: str) -> str:
 # 1. validate_yaml_syntax
 # ═════════════════════════════════════════════════════════════════════════════
 class TestValidateYamlSyntax:
-
     def test_valid_yaml_returns_no_issues(self, clean_file):
         issues = validate_yaml_syntax(clean_file)
         assert issues == [], f"Expected no issues, got: {issues}"
@@ -69,7 +69,9 @@ class TestValidateYamlSyntax:
 
     def test_issue_contains_line_number(self, issues_file):
         issues = validate_yaml_syntax(issues_file)
-        assert any(i.line is not None for i in issues), "Expected at least one issue with a line number"
+        assert any(i.line is not None for i in issues), (
+            "Expected at least one issue with a line number"
+        )
 
     def test_issue_rule_is_syntax(self, issues_file):
         issues = validate_yaml_syntax(issues_file)
@@ -185,7 +187,6 @@ class TestValidateYamlSyntax:
 # 2. run_yamllint
 # ═════════════════════════════════════════════════════════════════════════════
 class TestRunYamllint:
-
     def test_clean_file_has_no_linting_issues(self, clean_file):
         issues = run_yamllint(clean_file)
         assert issues == [], f"Expected no linting issues, got: {issues}"
@@ -221,9 +222,7 @@ class TestRunYamllint:
         """Regression: old parser left trailing ] in messages."""
         issues = run_yamllint(issues_file)
         for issue in issues:
-            assert not issue.message.endswith("]"), (
-                f"Stray ']' found in message: '{issue.message}'"
-            )
+            assert not issue.message.endswith("]"), f"Stray ']' found in message: '{issue.message}'"
 
     @patch("subprocess.run")
     def test_messages_with_colons_parsed_correctly(self, mock_run):
@@ -233,7 +232,9 @@ class TestRunYamllint:
             "test_file.yaml:12:34: [error] Expected ':', but found '<block end>' (syntax)\n"
             "test_file.yaml:56:78: [warning] Nested map: too many colons: yes (some-rule)\n"
         )
-        mock_result = type("MockResult", (), {"stdout": mock_stdout, "stderr": "", "returncode": 1})()
+        mock_result = type(
+            "MockResult", (), {"stdout": mock_stdout, "stderr": "", "returncode": 1}
+        )()
         mock_run.return_value = mock_result
 
         issues = run_yamllint("fake_path.yaml")
@@ -264,7 +265,15 @@ class TestRunYamllint:
     @patch("subprocess.run")
     def test_yamllint_not_installed_handled_gracefully(self, mock_run):
         """If yamllint is missing, report gracefully."""
-        mock_result = type("MockResult", (), {"stdout": "", "stderr": "/bin/python: No module named yamllint", "returncode": 1})()
+        mock_result = type(
+            "MockResult",
+            (),
+            {
+                "stdout": "",
+                "stderr": "/bin/python: No module named yamllint",
+                "returncode": 1,
+            },
+        )()
         mock_run.return_value = mock_result
         issues = run_yamllint("fake_path.yaml")
         assert len(issues) == 1
@@ -274,21 +283,31 @@ class TestRunYamllint:
     @patch("subprocess.run")
     def test_yamllint_malformed_output_handled_gracefully(self, mock_run):
         """Unexpected format uses fallback."""
-        mock_result = type("MockResult", (), {"stdout": "Something completely unexpected went wrong", "stderr": "", "returncode": 1})()
+        mock_result = type(
+            "MockResult",
+            (),
+            {
+                "stdout": "Something completely unexpected went wrong",
+                "stderr": "",
+                "returncode": 1,
+            },
+        )()
         mock_run.return_value = mock_result
         issues = run_yamllint("fake_path.yaml")
         assert len(issues) == 1
         assert issues[0].severity == Severity.MEDIUM
         assert issues[0].message == "Something completely unexpected went wrong"
+
     @patch("subprocess.run")
     def test_yamllint_timeout_handled_gracefully(self, mock_run):
         """Hanging subprocess triggers TimeoutExpired and graceful HIGH severity issue."""
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="yamllint", timeout=300)
         issues = run_yamllint("fake_path.yaml", timeout=300)
-        
+
         assert len(issues) == 1
         assert issues[0].severity == Severity.HIGH
         assert "timed out after 300 seconds" in issues[0].message
+
 
 class TestRunCheckov:
     @patch("subprocess.run")
@@ -297,10 +316,11 @@ class TestRunCheckov:
         # Need to import run_checkov if it's not imported at the top, but test_app.py imports it via `from app import *`
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="checkov", timeout=300)
         issues = run_checkov("fake_path.yaml", timeout=300)
-        
+
         assert len(issues) == 1
         assert issues[0].severity == Severity.HIGH
         assert "timed out after 300 seconds" in issues[0].message
+
     def test_trailing_spaces_detected(self, tmp_yaml):
         path = tmp_yaml("key: value   \n")
         try:
@@ -315,7 +335,6 @@ class TestRunCheckov:
 # 3. resolve_files
 # ═════════════════════════════════════════════════════════════════════════════
 class TestResolveFiles:
-
     def test_single_file_resolved(self, clean_file):
         result = resolve_files([clean_file])
         assert len(result) == 1
@@ -365,7 +384,6 @@ class TestResolveFiles:
 # 4. validate_yaml_file (integration)
 # ═════════════════════════════════════════════════════════════════════════════
 class TestValidateYamlFile:
-
     def test_clean_file_syntax_valid_true(self, clean_file):
         result = validate_yaml_file(clean_file)
         assert result.syntax_valid is True
@@ -464,9 +482,7 @@ class TestValidateYamlFile:
     def test_security_runs_by_default(self, clean_file):
         tools = ToolAvailability(checkov=True)
 
-        with patch(
-            "yaml_validator.validators.run_checkov", return_value=[]
-        ) as mock_run_checkov:
+        with patch("yaml_validator.validators.run_checkov", return_value=[]) as mock_run_checkov:
             validate_yaml_file(clean_file, tools)
 
         mock_run_checkov.assert_called_once_with(clean_file, timeout=300)
@@ -478,7 +494,6 @@ class TestValidateYamlFile:
         try:
             tools = ToolAvailability(yamllint=False, checkov=False)
             result = validate_yaml_file(path, tools)
-            yamllint_issues = [i for i in result.issues if i.tool == "yamllint"]
             # yamllint disabled — but run_yamllint is still called by validate_yaml_file;
             # ToolAvailability.yamllint only gates check_dependencies exit behaviour.
             # This test confirms the result type is still correct.
@@ -488,7 +503,6 @@ class TestValidateYamlFile:
 
 
 class TestLargeFileWarning:
-
     @pytest.mark.parametrize(
         "file_size",
         [LARGE_FILE_WARNING_THRESHOLD - 1, LARGE_FILE_WARNING_THRESHOLD],
@@ -530,7 +544,6 @@ class TestLargeFileWarning:
 
 
 class TestCliSecurityOption:
-
     def test_no_security_flag_is_passed_to_validator(self):
         result = ValidationResult(
             file_path="config.yaml",
@@ -553,9 +566,7 @@ class TestCliSecurityOption:
                 "yaml_validator.cli.check_dependencies",
                 return_value=ToolAvailability(),
             ),
-            patch(
-                "yaml_validator.cli.validate_yaml_file", return_value=result
-            ) as mock_validate,
+            patch("yaml_validator.cli.validate_yaml_file", return_value=result) as mock_validate,
             pytest.raises(SystemExit) as exit_info,
         ):
             validator.main()
@@ -568,11 +579,11 @@ class TestCliSecurityOption:
             no_security=True,
         )
 
+
 # ═════════════════════════════════════════════════════════════════════════════
 # 5. ValidationIssue dataclass
 # ═════════════════════════════════════════════════════════════════════════════
 class TestValidationIssue:
-
     def test_default_optional_fields_are_none(self):
         issue = ValidationIssue(tool="yaml", severity=Severity.CRITICAL, message="test")
         assert issue.line is None
@@ -582,16 +593,26 @@ class TestValidationIssue:
 
     def test_all_fields_settable(self):
         issue = ValidationIssue(
-            tool="yamllint", severity=Severity.MEDIUM,
-            message="bad indent", line=10, column=2,
-            rule="indentation", file_path="/tmp/test.yaml"
+            tool="yamllint",
+            severity=Severity.MEDIUM,
+            message="bad indent",
+            line=10,
+            column=2,
+            rule="indentation",
+            file_path="/tmp/test.yaml",
         )
         assert issue.line == 10
         assert issue.column == 2
         assert issue.rule == "indentation"
 
     def test_severity_enum_values(self):
-        for sev in [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO]:
+        for sev in [
+            Severity.CRITICAL,
+            Severity.HIGH,
+            Severity.MEDIUM,
+            Severity.LOW,
+            Severity.INFO,
+        ]:
             issue = ValidationIssue(tool="yaml", severity=sev, message="x")
             assert issue.severity == sev
 
@@ -600,7 +621,6 @@ class TestValidationIssue:
 # 6. ToolAvailability dataclass
 # ═════════════════════════════════════════════════════════════════════════════
 class TestToolAvailability:
-
     def test_defaults_are_both_true(self):
         tools = ToolAvailability()
         assert tools.yamllint is True
@@ -630,11 +650,13 @@ class TestToolAvailability:
 
     def test_check_dependencies_checkov_false_when_import_fails(self):
         """When checkov import fails, returned tools.checkov must be False."""
+
         def fake_run(cmd, **kwargs):
             # Fail only the 'import checkov' check
             if "import checkov" in " ".join(cmd):
                 raise FileNotFoundError("checkov not found")
             import subprocess
+
             r = subprocess.CompletedProcess(cmd, 0, b"", b"")
             return r
 
@@ -740,28 +762,27 @@ class TestPrintIssues:
     def test_severity_order_critical_high_medium_low_info(self, capsys):
         """Full ordering: CRITICAL → HIGH → MEDIUM → LOW → INFO."""
         issues = [
-            self._make_issue(Severity.INFO,     "msg-info"),
-            self._make_issue(Severity.LOW,      "msg-low"),
-            self._make_issue(Severity.MEDIUM,   "msg-medium"),
-            self._make_issue(Severity.HIGH,     "msg-high"),
+            self._make_issue(Severity.INFO, "msg-info"),
+            self._make_issue(Severity.LOW, "msg-low"),
+            self._make_issue(Severity.MEDIUM, "msg-medium"),
+            self._make_issue(Severity.HIGH, "msg-high"),
             self._make_issue(Severity.CRITICAL, "msg-critical"),
         ]
         print_issues(issues)
         captured = capsys.readouterr()
         out = captured.out
         pos_critical = out.index("msg-critical")
-        pos_high     = out.index("msg-high")
-        pos_medium   = out.index("msg-medium")
-        pos_low      = out.index("msg-low")
-        pos_info     = out.index("msg-info")
+        pos_high = out.index("msg-high")
+        pos_medium = out.index("msg-medium")
+        pos_low = out.index("msg-low")
+        pos_info = out.index("msg-info")
         assert pos_critical < pos_high < pos_medium < pos_low < pos_info, (
             "Expected output order: CRITICAL < HIGH < MEDIUM < LOW < INFO"
         )
 
     def test_issues_with_line_and_column_shown(self, capsys):
         issue = ValidationIssue(
-            tool="yaml", severity=Severity.HIGH,
-            message="bad indent", line=42, column=7
+            tool="yaml", severity=Severity.HIGH, message="bad indent", line=42, column=7
         )
         print_issues([issue])
         captured = capsys.readouterr()
@@ -770,8 +791,10 @@ class TestPrintIssues:
 
     def test_issues_with_rule_shown(self, capsys):
         issue = ValidationIssue(
-            tool="yamllint", severity=Severity.MEDIUM,
-            message="trailing spaces", rule="trailing-spaces"
+            tool="yamllint",
+            severity=Severity.MEDIUM,
+            message="trailing spaces",
+            rule="trailing-spaces",
         )
         print_issues([issue])
         captured = capsys.readouterr()
@@ -817,12 +840,12 @@ class TestPrintSummaryTable:
     def _make_summary(self, critical=0, high=0, medium=0, low=0, info=0) -> dict:
         total = critical + high + medium + low + info
         return {
-            'critical': critical,
-            'high': high,
-            'medium': medium,
-            'low': low,
-            'info': info,
-            'total': total,
+            "critical": critical,
+            "high": high,
+            "medium": medium,
+            "low": low,
+            "info": info,
+            "total": total,
         }
 
     # ── Structure ──────────────────────────────────────────────────────────
@@ -861,7 +884,7 @@ class TestPrintSummaryTable:
         print_summary_table(self._make_summary())
         out = capsys.readouterr().out
         # The TOTAL line should contain '0'
-        total_line = [l for l in out.splitlines() if "TOTAL" in l]
+        total_line = [line for line in out.splitlines() if "TOTAL" in line]
         assert total_line, "TOTAL row not found"
         assert "0" in total_line[0]
 
@@ -885,7 +908,7 @@ class TestPrintSummaryTable:
         expected_total = 1 + 2 + 3 + 4 + 5  # 15
         print_summary_table(summary)
         out = capsys.readouterr().out
-        total_line = [l for l in out.splitlines() if "TOTAL" in l]
+        total_line = [line for line in out.splitlines() if "TOTAL" in line]
         assert total_line, "TOTAL row not found"
         assert str(expected_total) in total_line[0]
 
@@ -928,9 +951,7 @@ class TestCheckDependenciesMocked:
     def test_returns_tool_availability_instance(self):
         """check_dependencies() always returns a ToolAvailability."""
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = type(
-                "R", (), {"returncode": 0, "stdout": b"", "stderr": b""}
-            )()
+            mock_run.return_value = type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
             result = check_dependencies()
         assert isinstance(result, ToolAvailability)
 
@@ -939,9 +960,7 @@ class TestCheckDependenciesMocked:
     def test_both_tools_available(self):
         """When both subprocess calls succeed, yamllint and checkov are True."""
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = type(
-                "R", (), {"returncode": 0, "stdout": b"", "stderr": b""}
-            )()
+            mock_run.return_value = type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
             result = check_dependencies()
         assert result.yamllint is True
         assert result.checkov is True
@@ -950,45 +969,46 @@ class TestCheckDependenciesMocked:
 
     def test_yamllint_missing_raises_sys_exit(self):
         """Missing yamllint causes sys.exit(1) (it is a required tool)."""
+
         def fake_run(cmd, **kwargs):
             if "yamllint" in " ".join(str(c) for c in cmd):
                 raise FileNotFoundError("yamllint not found")
             return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
 
-        with patch("subprocess.run", side_effect=fake_run):
-            with pytest.raises(SystemExit) as exc_info:
-                check_dependencies()
+        with patch("subprocess.run", side_effect=fake_run), pytest.raises(SystemExit) as exc_info:
+            check_dependencies()
         assert exc_info.value.code == 1
 
     def test_yamllint_missing_prints_critical_message(self, capsys):
         """Missing yamllint prints a CRITICAL message before exiting."""
+
         def fake_run(cmd, **kwargs):
             if "yamllint" in " ".join(str(c) for c in cmd):
                 raise FileNotFoundError("yamllint not found")
             return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
 
-        with patch("subprocess.run", side_effect=fake_run):
-            with pytest.raises(SystemExit):
-                check_dependencies()
+        with patch("subprocess.run", side_effect=fake_run), pytest.raises(SystemExit):
+            check_dependencies()
         out = capsys.readouterr().out
         assert "yamllint" in out.lower() or "Missing" in out
 
     def test_yamllint_timeout_raises_sys_exit(self):
         """TimeoutExpired on yamllint check is treated as missing → sys.exit(1)."""
+
         def fake_run(cmd, **kwargs):
             if "yamllint" in " ".join(str(c) for c in cmd):
                 raise subprocess.TimeoutExpired(cmd=cmd, timeout=30)
             return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
 
-        with patch("subprocess.run", side_effect=fake_run):
-            with pytest.raises(SystemExit) as exc_info:
-                check_dependencies()
+        with patch("subprocess.run", side_effect=fake_run), pytest.raises(SystemExit) as exc_info:
+            check_dependencies()
         assert exc_info.value.code == 1
 
     # ── checkov missing (optional) ──────────────────────────────────────────
 
     def test_checkov_missing_does_not_exit(self):
         """Missing checkov should NOT call sys.exit — it is optional."""
+
         def fake_run(cmd, **kwargs):
             if "import checkov" in " ".join(str(c) for c in cmd):
                 raise FileNotFoundError("checkov not found")
@@ -1000,6 +1020,7 @@ class TestCheckDependenciesMocked:
 
     def test_checkov_missing_sets_checkov_false(self):
         """When checkov import fails, returned tools.checkov is False."""
+
         def fake_run(cmd, **kwargs):
             if "import checkov" in " ".join(str(c) for c in cmd):
                 raise FileNotFoundError("checkov not found")
@@ -1011,6 +1032,7 @@ class TestCheckDependenciesMocked:
 
     def test_checkov_missing_yamllint_still_true(self):
         """When only checkov is missing, yamllint remains True."""
+
         def fake_run(cmd, **kwargs):
             if "import checkov" in " ".join(str(c) for c in cmd):
                 raise FileNotFoundError("checkov not found")
@@ -1022,6 +1044,7 @@ class TestCheckDependenciesMocked:
 
     def test_checkov_missing_prints_warning(self, capsys):
         """Missing checkov prints a warning to stdout (not a fatal error)."""
+
         def fake_run(cmd, **kwargs):
             if "import checkov" in " ".join(str(c) for c in cmd):
                 raise FileNotFoundError("checkov not found")
@@ -1034,6 +1057,7 @@ class TestCheckDependenciesMocked:
 
     def test_checkov_timeout_sets_checkov_false(self):
         """TimeoutExpired on checkov import check is treated as unavailable."""
+
         def fake_run(cmd, **kwargs):
             if "import checkov" in " ".join(str(c) for c in cmd):
                 raise subprocess.TimeoutExpired(cmd=cmd, timeout=30)
@@ -1047,18 +1071,19 @@ class TestCheckDependenciesMocked:
 
     def test_yamllint_called_process_error_raises_sys_exit(self):
         """CalledProcessError from yamllint check triggers sys.exit(1)."""
+
         def fake_run(cmd, **kwargs):
             if "yamllint" in " ".join(str(c) for c in cmd):
                 raise subprocess.CalledProcessError(returncode=1, cmd=cmd)
             return type("R", (), {"returncode": 0, "stdout": b"", "stderr": b""})()
 
-        with patch("subprocess.run", side_effect=fake_run):
-            with pytest.raises(SystemExit) as exc_info:
-                check_dependencies()
+        with patch("subprocess.run", side_effect=fake_run), pytest.raises(SystemExit) as exc_info:
+            check_dependencies()
         assert exc_info.value.code == 1
 
     def test_checkov_called_process_error_sets_false(self):
         """CalledProcessError from checkov import check marks checkov=False."""
+
         def fake_run(cmd, **kwargs):
             if "import checkov" in " ".join(str(c) for c in cmd):
                 raise subprocess.CalledProcessError(returncode=1, cmd=cmd)
@@ -1073,8 +1098,8 @@ class TestCheckDependenciesMocked:
 # 11. main() end-to-end — exit code 0  (#29)
 # ═════════════════════════════════════════════════════════════════════════════
 _PYTHON = str(Path(__file__).parent.parent / ".venv" / "bin" / "python")
-_APP    = str(Path(__file__).parent.parent / "app.py")
-_CLEAN  = str(FIXTURES / "test3_clean.yaml")
+_APP = str(Path(__file__).parent.parent / "app.py")
+_CLEAN = str(FIXTURES / "test3_clean.yaml")
 _ISSUES = str(FIXTURES / "test1_issues.yaml")
 
 
@@ -1084,7 +1109,9 @@ class TestMainEndToEnd:
     def _run(self, *args, timeout=60):
         return subprocess.run(
             [_PYTHON, _APP, *args],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
 
     def test_clean_file_exits_zero(self):
@@ -1128,7 +1155,9 @@ class TestMainExitCode1:
     def _run(self, *args, timeout=60):
         return subprocess.run(
             [_PYTHON, _APP, *args],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
 
     def test_issues_file_exits_one(self):
@@ -1154,7 +1183,7 @@ class TestMainExitCode1:
 
     def test_exit_code_differs_between_clean_and_issues(self):
         """Exit codes for a clean vs. issues file must differ."""
-        clean_result  = subprocess.run([_PYTHON, _APP, _CLEAN],  capture_output=True, timeout=60)
+        clean_result = subprocess.run([_PYTHON, _APP, _CLEAN], capture_output=True, timeout=60)
         issues_result = subprocess.run([_PYTHON, _APP, _ISSUES], capture_output=True, timeout=60)
         assert clean_result.returncode != issues_result.returncode, (
             "Clean and issues files should produce different exit codes"
@@ -1176,7 +1205,9 @@ class TestHelpVersionFlags:
     def _run(self, *args, timeout=10):
         return subprocess.run(
             [_PYTHON, _APP, *args],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
 
     # ── --version ────────────────────────────────────────────────────────────
@@ -1189,11 +1220,10 @@ class TestHelpVersionFlags:
     def test_version_prints_version_number(self):
         """--version output contains a version number (digits and dots)."""
         import re
+
         result = self._run("--version")
         combined = result.stdout + result.stderr
-        assert re.search(r"\d+\.\d+", combined), (
-            f"No version number found in: {combined!r}"
-        )
+        assert re.search(r"\d+\.\d+", combined), f"No version number found in: {combined!r}"
 
     def test_version_output_contains_program_name(self):
         """--version output contains the program name."""
@@ -1214,7 +1244,9 @@ class TestHelpVersionFlags:
         """--help output contains 'usage' (case-insensitive)."""
         result = self._run("--help")
         combined = result.stdout + result.stderr
-        assert "usage" in combined.lower(), f"'usage' missing from --help output: {combined[:300]!r}"
+        assert "usage" in combined.lower(), (
+            f"'usage' missing from --help output: {combined[:300]!r}"
+        )
 
     def test_help_mentions_file_argument(self):
         """--help describes the FILE positional argument."""
@@ -1247,7 +1279,9 @@ class TestMultiFileSummary:
     def _run(self, *args, timeout=120):
         return subprocess.run(
             [_PYTHON, _APP, *args],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
 
     def test_two_files_shows_files_scanned(self):
@@ -1280,9 +1314,7 @@ class TestMultiFileSummary:
     def test_total_issues_line_present(self):
         """'Total issues' line is printed in the combined summary."""
         result = self._run(_CLEAN, _ISSUES)
-        assert "Total issues" in result.stdout, (
-            f"'Total issues' not found:\n{result.stdout[-500:]}"
-        )
+        assert "Total issues" in result.stdout, f"'Total issues' not found:\n{result.stdout[-500:]}"
 
     def test_single_file_no_combined_section(self):
         """With only 1 file, 'Files scanned' should NOT appear (no combined section)."""
@@ -1388,8 +1420,8 @@ class TestResolveFilesNegative:
         exception — validation functions will handle the missing target later.
         """
         target = tmp_path / "ghost.yaml"
-        link   = tmp_path / "link_to_ghost.yaml"
-        link.symlink_to(target)          # target never created → broken
+        link = tmp_path / "link_to_ghost.yaml"
+        link.symlink_to(target)  # target never created → broken
         try:
             result = resolve_files([str(tmp_path)])
         except Exception as exc:
@@ -1402,9 +1434,9 @@ class TestResolveFilesNegative:
         Note: resolve_files returns the symlink's own name, not the target's.
         Both the real file and the symlink have .yaml extensions here.
         """
-        real   = tmp_path / "real.yaml"
+        real = tmp_path / "real.yaml"
         real.write_text("key: value\n")
-        link   = tmp_path / "link.yaml"
+        link = tmp_path / "link.yaml"
         link.symlink_to(real)
         result = resolve_files([str(tmp_path)])
         names = [Path(f).name for f in result]
@@ -1480,12 +1512,11 @@ class TestLargeYamlFiles:
     def test_large_file_syntax_check_within_30s(self):
         """Syntax check on the large fixture completes within 30 seconds."""
         import time
+
         start = time.monotonic()
         validate_yaml_syntax(_LARGE_FIXTURE)
         elapsed = time.monotonic() - start
-        assert elapsed < 30, (
-            f"Syntax check took {elapsed:.1f}s — too slow for a 40k-line file"
-        )
+        assert elapsed < 30, f"Syntax check took {elapsed:.1f}s — too slow for a 40k-line file"
 
     def test_large_file_resolve_files_works(self):
         """resolve_files() happily accepts the large fixture path."""
@@ -1503,6 +1534,7 @@ class TestLargeYamlFiles:
     def test_large_file_yamllint_within_60s(self):
         """yamllint on the large fixture completes within 60 seconds."""
         import time
+
         start = time.monotonic()
         run_yamllint(_LARGE_FIXTURE, timeout=60)
         elapsed = time.monotonic() - start
