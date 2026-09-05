@@ -276,37 +276,48 @@ def run_checkov(file_path: str, timeout: int = 300) -> list[ValidationIssue]:
         if result.stdout.strip():
             try:
                 data = json.loads(result.stdout)
+                reports = (
+                    data if isinstance(data, list) else [data] if isinstance(data, dict) else []
+                )
 
-                for check in data.get("results", {}).get("failed_checks", []):
-                    severity = Severity.HIGH
-                    if check.get("severity"):
-                        severity_map = {
-                            "CRITICAL": Severity.CRITICAL,
-                            "HIGH": Severity.HIGH,
-                            "MEDIUM": Severity.MEDIUM,
-                            "LOW": Severity.LOW,
-                        }
-                        severity = severity_map.get(
-                            check.get("severity", "HIGH").upper(),
-                            Severity.HIGH,
+                for report in reports:
+                    if not isinstance(report, dict):
+                        continue
+                    results = report.get("results")
+                    if not isinstance(results, dict):
+                        continue
+                    for check in results.get("failed_checks", []) or []:
+                        if not isinstance(check, dict):
+                            continue
+                        severity = Severity.HIGH
+                        if check.get("severity"):
+                            severity_map = {
+                                "CRITICAL": Severity.CRITICAL,
+                                "HIGH": Severity.HIGH,
+                                "MEDIUM": Severity.MEDIUM,
+                                "LOW": Severity.LOW,
+                            }
+                            severity = severity_map.get(
+                                str(check.get("severity", "HIGH")).upper(),
+                                Severity.HIGH,
+                            )
+
+                        line_num = None
+                        if check.get("file_line_range") and len(check["file_line_range"]) > 0:
+                            line_num = check["file_line_range"][0]
+
+                        issues.append(
+                            ValidationIssue(
+                                tool="checkov",
+                                severity=severity,
+                                message=check.get("check_name", "Security check failed"),
+                                line=line_num,
+                                rule=check.get("check_id", ""),
+                                file_path=file_path,
+                            )
                         )
 
-                    line_num = None
-                    if check.get("file_line_range") and len(check["file_line_range"]) > 0:
-                        line_num = check["file_line_range"][0]
-
-                    issues.append(
-                        ValidationIssue(
-                            tool="checkov",
-                            severity=severity,
-                            message=check.get("check_name", "Security check failed"),
-                            line=line_num,
-                            rule=check.get("check_id", ""),
-                            file_path=file_path,
-                        )
-                    )
-
-            except json.JSONDecodeError as e:
+            except (json.JSONDecodeError, AttributeError, TypeError, KeyError) as e:
                 issues.append(
                     ValidationIssue(
                         tool="checkov",

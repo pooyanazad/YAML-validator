@@ -4,6 +4,7 @@ Tests core functions directly (no Docker required).
 Run with: pytest tests/test_app.py -v
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -320,6 +321,88 @@ class TestRunCheckov:
         assert len(issues) == 1
         assert issues[0].severity == Severity.HIGH
         assert "timed out after 300 seconds" in issues[0].message
+
+    @patch("subprocess.run")
+    def test_checkov_list_output_handled(self, mock_run):
+        """Checkov returning a list of reports (multi-framework) is parsed correctly."""
+        mock_stdout = json.dumps(
+            [
+                {
+                    "check_type": "github_actions",
+                    "results": {
+                        "failed_checks": [
+                            {
+                                "check_name": "Unpinned action",
+                                "check_id": "CKV_GHA_1",
+                                "severity": "HIGH",
+                                "file_line_range": [10, 12],
+                            }
+                        ]
+                    },
+                },
+                {
+                    "check_type": "kubernetes",
+                    "results": {
+                        "failed_checks": [
+                            {
+                                "check_name": "Privileged container",
+                                "check_id": "CKV_K8S_1",
+                                "severity": "CRITICAL",
+                                "file_line_range": [25, 30],
+                            }
+                        ]
+                    },
+                },
+            ]
+        )
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["checkov"], returncode=1, stdout=mock_stdout, stderr=""
+        )
+        issues = run_checkov("workflow.yaml", timeout=300)
+
+        assert len(issues) == 2
+        assert issues[0].rule == "CKV_GHA_1"
+        assert issues[0].line == 10
+        assert issues[1].rule == "CKV_K8S_1"
+        assert issues[1].severity == Severity.CRITICAL
+
+    @patch("subprocess.run")
+    def test_checkov_dict_output_handled(self, mock_run):
+        """Checkov returning a single report dictionary is parsed correctly."""
+        mock_stdout = json.dumps(
+            {
+                "results": {
+                    "failed_checks": [
+                        {
+                            "check_name": "Ensure root user is not used",
+                            "check_id": "CKV_DOCKER_1",
+                            "severity": "MEDIUM",
+                            "file_line_range": [5, 6],
+                        }
+                    ]
+                }
+            }
+        )
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["checkov"], returncode=1, stdout=mock_stdout, stderr=""
+        )
+        issues = run_checkov("service.yaml", timeout=300)
+
+        assert len(issues) == 1
+        assert issues[0].rule == "CKV_DOCKER_1"
+        assert issues[0].severity == Severity.MEDIUM
+        assert issues[0].line == 5
+
+    @patch("subprocess.run")
+    def test_checkov_malformed_json_handled(self, mock_run):
+        """Checkov returning malformed output creates a parse failure issue without crashing."""
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["checkov"], returncode=1, stdout="not valid json {{{", stderr=""
+        )
+        issues = run_checkov("test.yaml", timeout=300)
+
+        assert len(issues) == 1
+        assert "Failed to parse checkov output" in issues[0].message
 
     def test_trailing_spaces_detected(self, tmp_yaml):
         path = tmp_yaml("key: value   \n")
