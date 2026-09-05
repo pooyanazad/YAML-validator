@@ -11,26 +11,26 @@ Dataclasses and enums shared across the package.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List
 
 # ===== IMPORTS & DEPENDENCIES =====
 try:
     from colorama import Fore, Style, init
+
     init(autoreset=True)
 except ImportError:
     # Fallback if colorama is not installed
     class Fore:  # type: ignore[no-redef]
-        RED = ''
-        YELLOW = ''
-        GREEN = ''
-        CYAN = ''
-        WHITE = ''
+        RED = ""
+        YELLOW = ""
+        GREEN = ""
+        CYAN = ""
+        WHITE = ""
 
     class Style:  # type: ignore[no-redef]
-        BRIGHT = ''
-        RESET_ALL = ''
+        BRIGHT = ""
+        RESET_ALL = ""
 
 
 # ===== ENUMS =====
@@ -42,7 +42,7 @@ class Severity(Enum):
     INFO = "INFO"
 
 
-SEVERITY_COLORS: Dict["Severity", str] = {
+SEVERITY_COLORS: dict[Severity, str] = {
     Severity.CRITICAL: Fore.RED + Style.BRIGHT,
     Severity.HIGH: Fore.RED,
     Severity.MEDIUM: Fore.YELLOW,
@@ -55,33 +55,34 @@ SEVERITY_COLORS: Dict["Severity", str] = {
 @dataclass
 class ValidationIssue:
     tool: str
-    severity: "Severity"
+    severity: Severity
     message: str
-    line: int = None
-    column: int = None
-    rule: str = None
-    file_path: str = None
+    line: int | None = None
+    column: int | None = None
+    rule: str | None = None
+    file_path: str | None = None
 
 
 @dataclass
 class ValidationResult:
     file_path: str
     syntax_valid: bool
-    issues: List["ValidationIssue"]
-    summary: Dict[str, int]
+    issues: list[ValidationIssue]
+    summary: dict[str, int]
 
 
 @dataclass
 class ToolAvailability:
     """Tracks which external tools are available on the system."""
+
     yamllint: bool = True
     checkov: bool = True
 
 
 __all__ = [
-    "Severity",
     "SEVERITY_COLORS",
+    "Severity",
+    "ToolAvailability",
     "ValidationIssue",
     "ValidationResult",
-    "ToolAvailability",
 ]

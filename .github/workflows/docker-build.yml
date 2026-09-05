@@ -108,6 +108,10 @@ jobs:
         run: |
           ruff check .
 
+      - name: Type check with mypy
+        run: |
+          mypy app.py yaml_validator/ --ignore-missing-imports
+
       - name: Run pytest with report and coverage gate
         run: |
           python -m pytest tests/test_app.py -v \

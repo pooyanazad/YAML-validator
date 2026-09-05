@@ -10,35 +10,36 @@ Coloured printing helpers used throughout the package.
 
 from __future__ import annotations
 
-from typing import Dict, List
-
 try:
     from colorama import Fore, Style, init
+
     init(autoreset=True)
 except ImportError:
+
     class Fore:  # type: ignore[no-redef]
-        RED = ''
-        YELLOW = ''
-        GREEN = ''
-        CYAN = ''
-        WHITE = ''
+        RED = ""
+        YELLOW = ""
+        GREEN = ""
+        CYAN = ""
+        WHITE = ""
 
     class Style:  # type: ignore[no-redef]
-        BRIGHT = ''
-        RESET_ALL = ''
+        BRIGHT = ""
+        RESET_ALL = ""
 
-from yaml_validator.models import Severity, SEVERITY_COLORS, ValidationIssue
+
+from yaml_validator.models import SEVERITY_COLORS, Severity, ValidationIssue
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-def print_colored(text: str, severity: Severity = None, bold: bool = False) -> None:
+def print_colored(text: str, severity: Severity | None = None, bold: bool = False) -> None:
     """Print text with colour based on severity."""
-    color = SEVERITY_COLORS.get(severity, Fore.WHITE)
-    style = Style.BRIGHT if bold else ''
+    color = SEVERITY_COLORS.get(severity, Fore.WHITE) if severity is not None else Fore.WHITE
+    style = Style.BRIGHT if bold else ""
     print(f"{color}{style}{text}{Style.RESET_ALL}")
 
 
-def print_issues(issues: List[ValidationIssue]) -> None:
+def print_issues(issues: list[ValidationIssue]) -> None:
     """Print issues with colour coding, grouped by severity (critical first)."""
     if not issues:
         return
@@ -47,7 +48,7 @@ def print_issues(issues: List[ValidationIssue]) -> None:
     print_colored("-" * 60, Severity.INFO)
 
     # Group issues by severity
-    severity_groups: Dict[Severity, List[ValidationIssue]] = {}
+    severity_groups: dict[Severity, list[ValidationIssue]] = {}
     for issue in issues:
         severity_groups.setdefault(issue.severity, []).append(issue)
 
@@ -78,7 +79,7 @@ def print_issues(issues: List[ValidationIssue]) -> None:
                 )
 
 
-def print_summary_table(summary: Dict[str, int]) -> None:
+def print_summary_table(summary: dict[str, int]) -> None:
     """Print a colour-coded summary table of severity counts."""
     print_colored("\n📊 Summary Report:", Severity.INFO, bold=True)
     print_colored("=" * 60, Severity.INFO)
@@ -89,11 +90,11 @@ def print_summary_table(summary: Dict[str, int]) -> None:
 
     # Table rows
     severity_items = [
-        ('CRITICAL', summary['critical'], Severity.CRITICAL),
-        ('HIGH', summary['high'], Severity.HIGH),
-        ('MEDIUM', summary['medium'], Severity.MEDIUM),
-        ('LOW', summary['low'], Severity.LOW),
-        ('INFO', summary['info'], Severity.INFO),
+        ("CRITICAL", summary["critical"], Severity.CRITICAL),
+        ("HIGH", summary["high"], Severity.HIGH),
+        ("MEDIUM", summary["medium"], Severity.MEDIUM),
+        ("LOW", summary["low"], Severity.LOW),
+        ("INFO", summary["info"], Severity.INFO),
     ]
 
     for name, count, severity in severity_items:
@@ -101,7 +102,7 @@ def print_summary_table(summary: Dict[str, int]) -> None:
         print_colored(f"{name:<12} {count:<8} {status:<20}", severity)
 
     print_colored("-" * 40, Severity.INFO)
-    total_color = Severity.CRITICAL if summary['total'] > 0 else Severity.INFO
+    total_color = Severity.CRITICAL if summary["total"] > 0 else Severity.INFO
     print_colored(
         f"{'TOTAL':<12} {summary['total']:<8} "
         f"{'Issues Found' if summary['total'] > 0 else 'All Clean'}",
