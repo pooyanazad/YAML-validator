@@ -27,3 +27,5 @@ Thumbs.db
 # Project-specific
 improvement_suggestions.md
 htmlcov/
+.coverage
+.coverage.*

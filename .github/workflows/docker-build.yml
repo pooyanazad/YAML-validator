@@ -104,9 +104,11 @@ jobs:
         run: |
           pip install --quiet -r requirements.txt -r requirements-test.txt
 
-      - name: Run pytest with report
+      - name: Run pytest with report and coverage gate
         run: |
           python -m pytest tests/test_app.py -v \
+            --cov=yaml_validator --cov=app --cov-fail-under=70 \
+            --cov-report=term-missing \
             --junit-xml=test-results.xml \
             --json-report --json-report-file=test-report.json \
             2>&1 | tee pytest-output.txt
