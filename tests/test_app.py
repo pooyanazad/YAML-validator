@@ -1180,7 +1180,7 @@ class TestCheckDependenciesMocked:
 # ═════════════════════════════════════════════════════════════════════════════
 # 11. main() end-to-end — exit code 0  (#29)
 # ═════════════════════════════════════════════════════════════════════════════
-_PYTHON = str(Path(__file__).parent.parent / ".venv" / "bin" / "python")
+_PYTHON = sys.executable
 _APP = str(Path(__file__).parent.parent / "app.py")
 _CLEAN = str(FIXTURES / "test3_clean.yaml")
 _ISSUES = str(FIXTURES / "test1_issues.yaml")
