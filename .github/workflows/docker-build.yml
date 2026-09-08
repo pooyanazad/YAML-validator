@@ -102,7 +102,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --quiet -r requirements.txt -r requirements-test.txt
+          pip install --quiet -r requirements.txt -r requirements-test.txt -r requirements-dev.txt
 
       - name: Lint with ruff
         run: |
@@ -115,6 +115,45 @@ jobs:
       - name: Type check with mypy
         run: |
           mypy app.py yaml_validator/ --ignore-missing-imports
+
+  # ── 3b. SECURITY AUDIT ───────────────────────────────────────────────────────
+  pip-audit:
+    name: 🔐 Pip Audit (CVE Scan)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install --quiet -r requirements.txt -r requirements-test.txt -r requirements-dev.txt
+          pip install --quiet pip-audit
+
+      - name: Run pip-audit
+        run: |
+          pip-audit --requirement requirements.txt \
+                    --requirement requirements-test.txt \
+                    --requirement requirements-dev.txt \
+                    --format json \
+                    --output pip-audit-report.json || true
+          pip-audit --requirement requirements.txt \
+                    --requirement requirements-test.txt \
+                    --requirement requirements-dev.txt
+
+      - name: Upload pip-audit report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
+          retention-days: 30
+
 
   # ── 4. APP TESTS ─────────────────────────────────────────────────────────────
   app-tests:
@@ -266,7 +305,7 @@ jobs:
   release-image:
     name: 🚀 [Release] Push Docker Image
     runs-on: ubuntu-latest
-    needs: [setup, lint, app-tests, test]
+    needs: [setup, lint, pip-audit, app-tests, test]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
@@ -436,7 +475,7 @@ jobs:
   summary:
     name: 📊 Summary
     runs-on: ubuntu-latest
-    needs: [setup, build, lint, app-tests, test, release-image, release-notes, release-package]
+    needs: [setup, build, lint, pip-audit, app-tests, test, release-image, release-notes, release-package]
     if: always()
     steps:
       - name: Write job summary
@@ -448,6 +487,7 @@ jobs:
           echo "| 🔧 Setup | ${{ needs.setup.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🐳 Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🧹 Lint (Ruff & Mypy) | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔐 Pip Audit (CVE Scan) | ${{ needs.pip-audit.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🔬 App Tests | ${{ needs.app-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🧪 Docker Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🚀 Push Image | ${{ needs.release-image.result }} |" >> $GITHUB_STEP_SUMMARY
