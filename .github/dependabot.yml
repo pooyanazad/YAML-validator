@@ -1,6 +1,6 @@
 version: 2
 updates:
-  # Pip (production & test dependencies)
+  # Pip (production, test & dev dependencies)
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
