@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # Pip (production & test dependencies)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
+    groups:
+      production-deps:
+        patterns:
+          - "yamllint"
+          - "checkov"
+          - "colorama"
+          - "PyYAML"
+      test-deps:
+        patterns:
+          - "pytest*"
+      dev-deps:
+        patterns:
+          - "ruff"
+          - "mypy"
+          - "black"
+          - "pre-commit"
+          - "pip-audit"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "github-actions"
