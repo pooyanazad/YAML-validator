@@ -26,5 +26,9 @@ RUN chmod +x entrypoint.sh
 # Set the working directory to /data for file operations
 WORKDIR /data
 
+# Verify the image is functional by checking that core libraries are importable
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python3 -c "import yaml; import yamllint"
+
 # Set the entrypoint to use the shell script
 ENTRYPOINT ["/app/entrypoint.sh"]
