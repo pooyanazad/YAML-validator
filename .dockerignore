@@ -5,3 +5,6 @@ LICENSE
 README.md
 improvement_suggestions.md
 .dockerignore
+__pycache__
+.venv
+.pytest_cache
