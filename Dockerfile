@@ -1,6 +1,13 @@
 # Use Python slim image for smaller size
 FROM python:3.12-slim
 
+# OCI image labels for discoverability and traceability
+LABEL org.opencontainers.image.title="YAML Validator" \
+      org.opencontainers.image.description="Validate YAML files for syntax errors, style issues, and security misconfigurations." \
+      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.source="https://github.com/pooyanazad/YAML-validator" \
+      org.opencontainers.image.licenses="MIT"
+
 # Set working directory
 WORKDIR /app
 
