@@ -30,6 +30,13 @@ COPY entrypoint.sh .
 # Make entrypoint script executable
 RUN chmod +x entrypoint.sh
 
+# Create a non-root user and give it ownership of the app and data directories
+RUN useradd --system --create-home --shell /bin/bash validator \
+    && chown -R validator:validator /app /data
+
+# Switch to the non-root user to avoid running as root inside the container
+USER validator
+
 # Set the working directory to /data for file operations
 WORKDIR /data
 
