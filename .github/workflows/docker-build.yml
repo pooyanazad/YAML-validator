@@ -167,16 +167,7 @@ jobs:
           echo "## 🛡️ Trivy Container Scan" >> $GITHUB_STEP_SUMMARY
           echo "Scanned: \`${{ env.TEST_IMAGE }}\` for HIGH/CRITICAL CVEs." >> $GITHUB_STEP_SUMMARY
           if [ -f trivy-results.sarif ]; then
-            COUNT=$(python3 -c "
-import json, sys
-try:
-    data = json.load(open('trivy-results.sarif'))
-    runs = data.get('runs', [])
-    total = sum(len(r.get('results', [])) for r in runs)
-    print(total)
-except Exception:
-    print('unknown')
-")
+            COUNT=$(grep -c '"ruleId"' trivy-results.sarif 2>/dev/null || echo "0")
             if [ "$COUNT" = "0" ]; then
               echo "✅ No HIGH/CRITICAL vulnerabilities found." >> $GITHUB_STEP_SUMMARY
             else
