@@ -86,6 +86,51 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  # ── 2b. IMAGE SIZE CHECK ──────────────────────────────────────────────────────
+  image-size-check:
+    name: 📏 Image Size Check
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Build Docker image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          load: true
+          tags: ${{ env.TEST_IMAGE }}
+          cache-from: type=gha
+
+      - name: Report and enforce image size limit
+        run: |
+          SIZE_BYTES=$(docker image inspect ${{ env.TEST_IMAGE }} --format='{{.Size}}')
+          SIZE_MB=$(echo "scale=2; $SIZE_BYTES / 1048576" | bc)
+          SIZE_MB_INT=$(echo "$SIZE_BYTES / 1048576" | bc)
+          MAX_MB=500
+
+          echo "## 📏 Docker Image Size" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Image  | \`${{ env.TEST_IMAGE }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Size   | ${SIZE_MB} MB |" >> $GITHUB_STEP_SUMMARY
+          echo "| Limit  | ${MAX_MB} MB |" >> $GITHUB_STEP_SUMMARY
+
+          echo "🐳 Image size: ${SIZE_MB} MB (limit: ${MAX_MB} MB)"
+
+          if [ "$SIZE_MB_INT" -gt "$MAX_MB" ]; then
+            echo "❌ Image exceeds ${MAX_MB} MB size limit!" >> $GITHUB_STEP_SUMMARY
+            echo "❌ FAIL: image is ${SIZE_MB} MB, which exceeds the ${MAX_MB} MB limit."
+            exit 1
+          else
+            echo "✅ Image is within the size limit." >> $GITHUB_STEP_SUMMARY
+            echo "✅ PASS: image is within the ${MAX_MB} MB limit."
+          fi
+
   # ── 3. LINT & QUALITY ────────────────────────────────────────────────────────
   lint:
     name: 🧹 Lint (Ruff & Mypy)
@@ -341,7 +386,7 @@ jobs:
   release-image:
     name: 🚀 [Release] Push Docker Image
     runs-on: ubuntu-latest
-    needs: [setup, lint, pip-audit, app-tests, test]
+    needs: [setup, lint, pip-audit, app-tests, test, image-size-check]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
@@ -511,7 +556,7 @@ jobs:
   summary:
     name: 📊 Summary
     runs-on: ubuntu-latest
-    needs: [setup, build, lint, pip-audit, app-tests, test, release-image, release-notes, release-package]
+    needs: [setup, build, lint, pip-audit, app-tests, test, image-size-check, release-image, release-notes, release-package]
     if: always()
     steps:
       - name: Write job summary
@@ -526,6 +571,7 @@ jobs:
           echo "| 🔐 Pip Audit (CVE Scan) | ${{ needs.pip-audit.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🔬 App Tests | ${{ needs.app-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🧪 Docker Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📏 Image Size Check | ${{ needs.image-size-check.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🚀 Push Image | ${{ needs.release-image.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 📝 Release Notes | ${{ needs.release-notes.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 📦 GitHub Package | ${{ needs.release-package.result }} |" >> $GITHUB_STEP_SUMMARY
