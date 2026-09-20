@@ -1,5 +1,23 @@
-# Use Python slim image for smaller size
-FROM python:3.12-slim
+# ─────────────────────────────────────────────
+# Stage 1 — builder: install dependencies only
+# ─────────────────────────────────────────────
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+# Install into an isolated venv so we can copy it cleanly
+RUN python3 -m venv /build/venv
+
+COPY requirements.txt .
+
+# Upgrade pip inside the venv and install production dependencies
+RUN /build/venv/bin/pip install --upgrade pip --quiet && \
+    /build/venv/bin/pip install --quiet -r requirements.txt
+
+# ─────────────────────────────────────────────
+# Stage 2 — runtime: lean production image
+# ─────────────────────────────────────────────
+FROM python:3.12-slim AS runtime
 
 # OCI image labels for discoverability and traceability
 LABEL org.opencontainers.image.title="YAML Validator" \
@@ -8,33 +26,29 @@ LABEL org.opencontainers.image.title="YAML Validator" \
       org.opencontainers.image.source="https://github.com/pooyanazad/YAML-validator" \
       org.opencontainers.image.licenses="MIT"
 
-# Set working directory
-WORKDIR /app
+# Copy the pre-built virtual environment from the builder stage
+COPY --from=builder /build/venv /app/venv
 
-# Create data directory for mounting external files
+# Set working directory and create mount directory
+WORKDIR /app
 RUN mkdir -p /data
 
-# Copy requirements first for better caching
-COPY requirements.txt .
-
-# Upgrade pip and install dependencies
-RUN python3 -m pip install --upgrade pip && \
-    python3 -m pip install -r requirements.txt
-
-# Copy the application and test files
+# Copy only the application source — no test files, no dev tools
 COPY app.py .
 COPY yaml_validator/ ./yaml_validator/
-COPY tests/ ./tests/
 COPY entrypoint.sh .
 
 # Make entrypoint script executable
 RUN chmod +x entrypoint.sh
 
-# Create a non-root user and give it ownership of the app and data directories
+# Create a non-root user and grant ownership
 RUN useradd --system --create-home --shell /bin/bash validator \
     && chown -R validator:validator /app /data
 
-# Switch to the non-root user to avoid running as root inside the container
+# Use the venv Python for all subsequent commands
+ENV PATH="/app/venv/bin:$PATH"
+
+# Switch to the non-root user
 USER validator
 
 # Set the working directory to /data for file operations
