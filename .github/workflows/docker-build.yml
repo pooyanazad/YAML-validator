@@ -131,6 +131,68 @@ jobs:
             echo "✅ PASS: image is within the ${MAX_MB} MB limit."
           fi
 
+  # ── 2c. TRIVY CONTAINER SCAN ─────────────────────────────────────────────────
+  trivy-scan:
+    name: 🛡️ Trivy Container Scan
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Build Docker image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          load: true
+          tags: ${{ env.TEST_IMAGE }}
+          cache-from: type=gha
+
+      - name: Scan image with Trivy (HIGH & CRITICAL CVEs)
+        id: trivy
+        uses: aquasecurity/trivy-action@dc9a4c10ee69b9e60c9da19e0bbf965e86f4ccc5 # v0.32.0
+        with:
+          image-ref: ${{ env.TEST_IMAGE }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: '0'   # report-only; use '1' to block PRs on findings
+
+      - name: Display Trivy summary
+        if: always()
+        run: |
+          echo "## 🛡️ Trivy Container Scan" >> $GITHUB_STEP_SUMMARY
+          echo "Scanned: \`${{ env.TEST_IMAGE }}\` for HIGH/CRITICAL CVEs." >> $GITHUB_STEP_SUMMARY
+          if [ -f trivy-results.sarif ]; then
+            COUNT=$(python3 -c "
+import json, sys
+try:
+    data = json.load(open('trivy-results.sarif'))
+    runs = data.get('runs', [])
+    total = sum(len(r.get('results', [])) for r in runs)
+    print(total)
+except Exception:
+    print('unknown')
+")
+            if [ "$COUNT" = "0" ]; then
+              echo "✅ No HIGH/CRITICAL vulnerabilities found." >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⚠️ Found **${COUNT}** HIGH/CRITICAL finding(s) — review the SARIF artifact." >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "Findings: ${COUNT}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload Trivy SARIF report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-sarif-report
+          path: trivy-results.sarif
+          retention-days: 30
+
   # ── 3. LINT & QUALITY ────────────────────────────────────────────────────────
   lint:
     name: 🧹 Lint (Ruff & Mypy)
@@ -386,7 +448,7 @@ jobs:
   release-image:
     name: 🚀 [Release] Push Docker Image
     runs-on: ubuntu-latest
-    needs: [setup, lint, pip-audit, app-tests, test, image-size-check]
+    needs: [setup, lint, pip-audit, app-tests, test, image-size-check, trivy-scan]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
@@ -556,7 +618,7 @@ jobs:
   summary:
     name: 📊 Summary
     runs-on: ubuntu-latest
-    needs: [setup, build, lint, pip-audit, app-tests, test, image-size-check, release-image, release-notes, release-package]
+    needs: [setup, build, lint, pip-audit, app-tests, test, image-size-check, trivy-scan, release-image, release-notes, release-package]
     if: always()
     steps:
       - name: Write job summary
@@ -572,6 +634,7 @@ jobs:
           echo "| 🔬 App Tests | ${{ needs.app-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🧪 Docker Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 📏 Image Size Check | ${{ needs.image-size-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🛡️ Trivy Container Scan | ${{ needs.trivy-scan.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🚀 Push Image | ${{ needs.release-image.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 📝 Release Notes | ${{ needs.release-notes.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 📦 GitHub Package | ${{ needs.release-package.result }} |" >> $GITHUB_STEP_SUMMARY
