@@ -151,15 +151,20 @@ jobs:
           tags: ${{ env.TEST_IMAGE }}
           cache-from: type=gha
 
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+          trivy --version
+
       - name: Scan image with Trivy (HIGH & CRITICAL CVEs)
-        id: trivy
-        uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4 # v0.32.0
-        with:
-          image-ref: ${{ env.TEST_IMAGE }}
-          format: sarif
-          output: trivy-results.sarif
-          severity: HIGH,CRITICAL
-          exit-code: '0'   # report-only; use '1' to block PRs on findings
+        run: |
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --format sarif \
+            --output trivy-results.sarif \
+            --exit-code 0 \
+            ${{ env.TEST_IMAGE }}
 
       - name: Display Trivy summary
         if: always()
@@ -183,6 +188,7 @@ jobs:
           name: trivy-sarif-report
           path: trivy-results.sarif
           retention-days: 30
+
 
   # ── 3. LINT & QUALITY ────────────────────────────────────────────────────────
   lint:
