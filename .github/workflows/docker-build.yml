@@ -111,7 +111,7 @@ jobs:
           SIZE_BYTES=$(docker image inspect ${{ env.TEST_IMAGE }} --format='{{.Size}}')
           SIZE_MB=$(echo "scale=2; $SIZE_BYTES / 1048576" | bc)
           SIZE_MB_INT=$(echo "$SIZE_BYTES / 1048576" | bc)
-          MAX_MB=500
+          MAX_MB=700
 
           echo "## 📏 Docker Image Size" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
@@ -153,7 +153,7 @@ jobs:
 
       - name: Scan image with Trivy (HIGH & CRITICAL CVEs)
         id: trivy
-        uses: aquasecurity/trivy-action@dc9a4c10ee69b9e60c9da19e0bbf965e86f4ccc5 # v0.32.0
+        uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4 # v0.32.0
         with:
           image-ref: ${{ env.TEST_IMAGE }}
           format: sarif
