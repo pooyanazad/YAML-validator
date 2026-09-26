@@ -19,7 +19,7 @@ from pathlib import Path
 # Re-export __version__ so callers can do `from yaml_validator.cli import __version__`
 from yaml_validator import __version__
 from yaml_validator.models import Severity, ToolAvailability
-from yaml_validator.output import print_colored, print_issues, print_summary_table
+from yaml_validator.output import print_colored, print_issues, print_json_result, print_summary_table
 from yaml_validator.validators import validate_yaml_file
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -173,6 +173,8 @@ def main() -> None:
 
     tools = check_dependencies()
 
+    json_mode = args.format == "json"
+
     results = []
     has_critical_high = False
     total_issues = 0
@@ -183,19 +185,24 @@ def main() -> None:
             tools,
             timeout=args.timeout,
             no_security=args.no_security,
+            quiet=json_mode,
         )
         results.append(result)
 
-        print_issues(result.issues)
-        print_summary_table(result.summary)
+        if not json_mode:
+            print_issues(result.issues)
+            print_summary_table(result.summary)
 
         critical_high = result.summary["critical"] + result.summary["high"]
         if critical_high > 0:
             has_critical_high = True
         total_issues += result.summary["total"]
 
-    # Combined summary for multi-file runs
-    if len(yaml_files) > 1:
+    # ── JSON output (single emit at the end) ──────────────────────────────────
+    if json_mode:
+        print_json_result(results)
+    # Combined summary for multi-file runs (text mode only)
+    if not json_mode and len(yaml_files) > 1:
         print_colored("\n" + "=" * 60, Severity.INFO)
         print_colored("📊 Combined Results:", Severity.INFO, bold=True)
         print_colored(f"   Files scanned: {len(yaml_files)}", Severity.INFO)
@@ -226,27 +233,31 @@ def main() -> None:
                 )
 
     # Final status
-    print_colored("\n" + "=" * 60, Severity.INFO)
+    if not json_mode:
+        print_colored("\n" + "=" * 60, Severity.INFO)
     if total_issues == 0:
-        print_colored(
-            "🎉 Validation completed successfully! No issues found.",
-            Severity.INFO,
-            bold=True,
-        )
+        if not json_mode:
+            print_colored(
+                "🎉 Validation completed successfully! No issues found.",
+                Severity.INFO,
+                bold=True,
+            )
         sys.exit(0)
     elif has_critical_high:
-        print_colored(
-            "💥 Validation failed! Found critical/high severity issues.",
-            Severity.CRITICAL,
-            bold=True,
-        )
+        if not json_mode:
+            print_colored(
+                "💥 Validation failed! Found critical/high severity issues.",
+                Severity.CRITICAL,
+                bold=True,
+            )
         sys.exit(1)
     else:
-        print_colored(
-            f"⚠️  Validation completed with {total_issues} minor issues.",
-            Severity.MEDIUM,
-            bold=True,
-        )
+        if not json_mode:
+            print_colored(
+                f"⚠️  Validation completed with {total_issues} minor issues.",
+                Severity.MEDIUM,
+                bold=True,
+            )
         sys.exit(0)
 
 

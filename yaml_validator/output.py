@@ -6,9 +6,13 @@ Coloured printing helpers used throughout the package.
   print_colored()        — print a line with ANSI colour based on Severity
   print_issues()         — grouped, colour-coded issue listing
   print_summary_table()  — tabular summary of severity counts
+  result_to_json()       — convert a ValidationResult to a serialisable dict
+  print_json_result()    — serialise one-or-more results as JSON to stdout
 """
 
 from __future__ import annotations
+
+import json
 
 try:
     from colorama import Fore, Style, init
@@ -110,5 +114,45 @@ def print_summary_table(summary: dict[str, int]) -> None:
         bold=True,
     )
 
+def result_to_json(result: "ValidationResult") -> dict:  # type: ignore[name-defined]
+    """Convert a ValidationResult dataclass to a plain, JSON-serialisable dict."""
+    from yaml_validator.models import ValidationResult  # avoid circular at module level
 
-__all__ = ["print_colored", "print_issues", "print_summary_table"]
+    return {
+        "file_path": result.file_path,
+        "syntax_valid": result.syntax_valid,
+        "summary": result.summary,
+        "issues": [
+            {
+                "tool": issue.tool,
+                "severity": issue.severity.value,
+                "message": issue.message,
+                "line": issue.line,
+                "column": issue.column,
+                "rule": issue.rule,
+                "file_path": issue.file_path,
+            }
+            for issue in result.issues
+        ],
+    }
+
+
+def print_json_result(results: list) -> None:  # list[ValidationResult]
+    """Serialise one or more ValidationResult objects as pretty-printed JSON to stdout.
+
+    No ANSI colour codes are emitted, making the output safe to pipe into
+    ``jq``, ``python -m json.tool``, or any other JSON consumer.
+    """
+    payload = [result_to_json(r) for r in results]
+    # Single-file shortcut: unwrap the list so the output is a plain object
+    output = payload[0] if len(payload) == 1 else payload
+    print(json.dumps(output, indent=2, ensure_ascii=False))
+
+
+__all__ = [
+    "print_colored",
+    "print_issues",
+    "print_summary_table",
+    "print_json_result",
+    "result_to_json",
+]

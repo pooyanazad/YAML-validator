@@ -35,7 +35,9 @@ from yaml_validator.models import (  # noqa: F401
 from yaml_validator.output import (  # noqa: F401
     print_colored,
     print_issues,
+    print_json_result,
     print_summary_table,
+    result_to_json,
 )
 
 # ── validators ────────────────────────────────────────────────────────────────

@@ -355,13 +355,26 @@ def validate_yaml_file(
     tools: ToolAvailability | None = None,
     timeout: int = 300,
     no_security: bool = False,
+    quiet: bool = False,
 ) -> ValidationResult:
-    """Validate a YAML file using all available tools."""
+    """Validate a YAML file using all available tools.
+
+    Args:
+        file_path:   Path to the YAML file to validate.
+        tools:       Which external tools are available (probed automatically if None).
+        timeout:     Subprocess timeout in seconds.
+        no_security: Skip Checkov security checks.
+        quiet:       Suppress all progress output (used in JSON mode so stdout stays clean).
+    """
     if tools is None:
         tools = ToolAvailability()
 
-    print_colored(f"\n🔍 Validating: {file_path}", Severity.INFO, bold=True)
-    print_colored("=" * 60, Severity.INFO)
+    def _say(text: str, severity: Severity = Severity.INFO, bold: bool = False) -> None:
+        if not quiet:
+            print_colored(text, severity, bold=bold)
+
+    _say(f"\n🔍 Validating: {file_path}", Severity.INFO, bold=True)
+    _say("=" * 60, Severity.INFO)
     if not no_security:
         warn_if_large_file(file_path)
 
@@ -369,40 +382,40 @@ def validate_yaml_file(
     syntax_valid = True
 
     # 1. Check YAML syntax
-    print_colored("\n📋 Checking YAML syntax...", Severity.INFO)
+    _say("\n📋 Checking YAML syntax...", Severity.INFO)
     syntax_issues = validate_yaml_syntax(file_path)
     all_issues.extend(syntax_issues)
 
     if syntax_issues:
         syntax_valid = False
-        print_colored("❌ Syntax validation failed", Severity.CRITICAL)
+        _say("❌ Syntax validation failed", Severity.CRITICAL)
     else:
-        print_colored("✅ Syntax validation passed", Severity.INFO)
+        _say("✅ Syntax validation passed", Severity.INFO)
 
     # 2. Run yamllint
-    print_colored("\n🔧 Running yamllint...", Severity.INFO)
+    _say("\n🔧 Running yamllint...", Severity.INFO)
     yamllint_issues = run_yamllint(file_path, timeout=timeout)
     all_issues.extend(yamllint_issues)
 
     if yamllint_issues:
-        print_colored(f"⚠️  Found {len(yamllint_issues)} linting issues", Severity.MEDIUM)
+        _say(f"⚠️  Found {len(yamllint_issues)} linting issues", Severity.MEDIUM)
     else:
-        print_colored("✅ No linting issues found", Severity.INFO)
+        _say("✅ No linting issues found", Severity.INFO)
 
     # 3. Run checkov (if available)
     if no_security:
-        print_colored("\n⚠️  Security checks skipped (--no-security)", Severity.MEDIUM)
+        _say("\n⚠️  Security checks skipped (--no-security)", Severity.MEDIUM)
     elif tools.checkov:
-        print_colored("\n🔒 Running security checks (checkov)...", Severity.INFO)
+        _say("\n🔒 Running security checks (checkov)...", Severity.INFO)
         checkov_issues = run_checkov(file_path, timeout=timeout)
         all_issues.extend(checkov_issues)
 
         if checkov_issues:
-            print_colored(f"🚨 Found {len(checkov_issues)} security issues", Severity.HIGH)
+            _say(f"🚨 Found {len(checkov_issues)} security issues", Severity.HIGH)
         else:
-            print_colored("✅ No security issues found", Severity.INFO)
+            _say("✅ No security issues found", Severity.INFO)
     else:
-        print_colored("\n⚠️  Security checks skipped (checkov not available)", Severity.MEDIUM)
+        _say("\n⚠️  Security checks skipped (checkov not available)", Severity.MEDIUM)
 
     # Generate summary
     summary = {
