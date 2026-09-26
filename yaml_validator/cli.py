@@ -19,7 +19,12 @@ from pathlib import Path
 # Re-export __version__ so callers can do `from yaml_validator.cli import __version__`
 from yaml_validator import __version__
 from yaml_validator.models import Severity, ToolAvailability
-from yaml_validator.output import print_colored, print_issues, print_json_result, print_summary_table
+from yaml_validator.output import (
+    print_colored,
+    print_issues,
+    print_json_result,
+    print_summary_table,
+)
 from yaml_validator.validators import validate_yaml_file
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -114,7 +119,7 @@ def resolve_files(paths: list[str]) -> list[str]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-def main() -> None:
+def main() -> None:  # noqa: PLR0912, PLR0915
     """Parse arguments, validate files, and set the process exit code."""
     parser = argparse.ArgumentParser(
         prog="yaml-validator",

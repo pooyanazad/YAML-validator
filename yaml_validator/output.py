@@ -13,6 +13,10 @@ Coloured printing helpers used throughout the package.
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from yaml_validator.models import ValidationResult
 
 try:
     from colorama import Fore, Style, init
@@ -114,10 +118,8 @@ def print_summary_table(summary: dict[str, int]) -> None:
         bold=True,
     )
 
-def result_to_json(result: "ValidationResult") -> dict:  # type: ignore[name-defined]
+def result_to_json(result: ValidationResult) -> dict:
     """Convert a ValidationResult dataclass to a plain, JSON-serialisable dict."""
-    from yaml_validator.models import ValidationResult  # avoid circular at module level
-
     return {
         "file_path": result.file_path,
         "syntax_valid": result.syntax_valid,

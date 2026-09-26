@@ -1675,7 +1675,7 @@ class TestJsonOutput:
             summary=summary,
         )
 
-    def _make_issue(
+    def _make_issue(  # noqa: PLR0913, PLR0917
         self,
         tool: str = "yaml",
         severity: Severity = Severity.MEDIUM,
@@ -1879,45 +1879,51 @@ class TestJsonOutput:
 
     def test_format_flag_accepted_json(self, clean_file):
         """--format json is accepted by argparse without SystemExit."""
-        with patch("sys.argv", ["yaml-validator", "--format", "json", clean_file]):
-            with patch("yaml_validator.cli.check_dependencies") as mock_deps:
-                mock_deps.return_value = ToolAvailability(yamllint=False, checkov=False)
-                with patch("yaml_validator.cli.validate_yaml_file") as mock_val:
-                    mock_val.return_value = self._make_result(file_path=clean_file)
-                    try:
-                        from yaml_validator import cli
+        with (
+            patch("sys.argv", ["yaml-validator", "--format", "json", clean_file]),
+            patch("yaml_validator.cli.check_dependencies") as mock_deps,
+            patch("yaml_validator.cli.validate_yaml_file") as mock_val,
+        ):
+            mock_deps.return_value = ToolAvailability(yamllint=False, checkov=False)
+            mock_val.return_value = self._make_result(file_path=clean_file)
+            try:
+                from yaml_validator import cli
 
-                        cli.main()
-                    except SystemExit as exc:
-                        assert exc.code == 0, f"Expected exit 0, got {exc.code}"
+                cli.main()
+            except SystemExit as exc:
+                assert exc.code == 0, f"Expected exit 0, got {exc.code}"
 
     def test_format_flag_accepted_text(self, clean_file):
         """--format text (explicit) is accepted by argparse without SystemExit."""
-        with patch("sys.argv", ["yaml-validator", "--format", "text", clean_file]):
-            with patch("yaml_validator.cli.check_dependencies") as mock_deps:
-                mock_deps.return_value = ToolAvailability(yamllint=False, checkov=False)
-                with patch("yaml_validator.cli.validate_yaml_file") as mock_val:
-                    mock_val.return_value = self._make_result(file_path=clean_file)
-                    try:
-                        from yaml_validator import cli
+        with (
+            patch("sys.argv", ["yaml-validator", "--format", "text", clean_file]),
+            patch("yaml_validator.cli.check_dependencies") as mock_deps,
+            patch("yaml_validator.cli.validate_yaml_file") as mock_val,
+        ):
+            mock_deps.return_value = ToolAvailability(yamllint=False, checkov=False)
+            mock_val.return_value = self._make_result(file_path=clean_file)
+            try:
+                from yaml_validator import cli
 
-                        cli.main()
-                    except SystemExit as exc:
-                        assert exc.code == 0, f"Expected exit 0, got {exc.code}"
+                cli.main()
+            except SystemExit as exc:
+                assert exc.code == 0, f"Expected exit 0, got {exc.code}"
 
     def test_format_flag_short_f(self, clean_file):
         """-f json (short form) is accepted by argparse."""
-        with patch("sys.argv", ["yaml-validator", "-f", "json", clean_file]):
-            with patch("yaml_validator.cli.check_dependencies") as mock_deps:
-                mock_deps.return_value = ToolAvailability(yamllint=False, checkov=False)
-                with patch("yaml_validator.cli.validate_yaml_file") as mock_val:
-                    mock_val.return_value = self._make_result(file_path=clean_file)
-                    try:
-                        from yaml_validator import cli
+        with (
+            patch("sys.argv", ["yaml-validator", "-f", "json", clean_file]),
+            patch("yaml_validator.cli.check_dependencies") as mock_deps,
+            patch("yaml_validator.cli.validate_yaml_file") as mock_val,
+        ):
+            mock_deps.return_value = ToolAvailability(yamllint=False, checkov=False)
+            mock_val.return_value = self._make_result(file_path=clean_file)
+            try:
+                from yaml_validator import cli
 
-                        cli.main()
-                    except SystemExit as exc:
-                        assert exc.code == 0, f"Expected exit 0, got {exc.code}"
+                cli.main()
+            except SystemExit as exc:
+                assert exc.code == 0, f"Expected exit 0, got {exc.code}"
 
     def test_format_json_produces_valid_json_via_subprocess(self, clean_file):
         """End-to-end: running the tool with --format json produces valid JSON on stdout."""
