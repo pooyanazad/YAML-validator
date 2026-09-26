@@ -660,6 +660,7 @@ class TestCliSecurityOption:
             ToolAvailability(),
             timeout=300,
             no_security=True,
+            quiet=False,
         )
 
 
@@ -1637,3 +1638,347 @@ class TestLargeYamlFiles:
         result = validate_yaml_file(_LARGE_FIXTURE, tools)
         for key in ("total", "critical", "high", "medium", "low", "info"):
             assert key in result.summary, f"Missing summary key: {key}"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 17. JSON output  (--format json)
+# ═════════════════════════════════════════════════════════════════════════════
+from app import print_json_result, result_to_json  # noqa: E402
+
+
+class TestJsonOutput:
+    """Tests for result_to_json(), print_json_result(), and --format json CLI flag."""
+
+    # ── helpers ───────────────────────────────────────────────────────────────
+
+    def _make_result(
+        self,
+        file_path: str = "test.yaml",
+        syntax_valid: bool = True,
+        issues: list | None = None,
+    ) -> ValidationResult:
+        """Build a minimal ValidationResult for testing."""
+        if issues is None:
+            issues = []
+        summary = {
+            "total": len(issues),
+            "critical": sum(1 for i in issues if i.severity == Severity.CRITICAL),
+            "high": sum(1 for i in issues if i.severity == Severity.HIGH),
+            "medium": sum(1 for i in issues if i.severity == Severity.MEDIUM),
+            "low": sum(1 for i in issues if i.severity == Severity.LOW),
+            "info": sum(1 for i in issues if i.severity == Severity.INFO),
+        }
+        return ValidationResult(
+            file_path=file_path,
+            syntax_valid=syntax_valid,
+            issues=issues,
+            summary=summary,
+        )
+
+    def _make_issue(
+        self,
+        tool: str = "yaml",
+        severity: Severity = Severity.MEDIUM,
+        message: str = "some problem",
+        line: int | None = 5,
+        column: int | None = 3,
+        rule: str | None = "test-rule",
+        file_path: str | None = "test.yaml",
+    ) -> ValidationIssue:
+        return ValidationIssue(
+            tool=tool,
+            severity=severity,
+            message=message,
+            line=line,
+            column=column,
+            rule=rule,
+            file_path=file_path,
+        )
+
+    # ── result_to_json() — field presence ─────────────────────────────────────
+
+    def test_result_to_json_returns_dict(self):
+        """result_to_json() must return a dict."""
+        result = self._make_result()
+        assert isinstance(result_to_json(result), dict)
+
+    def test_result_to_json_has_file_path(self):
+        result = self._make_result(file_path="myfile.yaml")
+        d = result_to_json(result)
+        assert d["file_path"] == "myfile.yaml"
+
+    def test_result_to_json_has_syntax_valid_true(self):
+        result = self._make_result(syntax_valid=True)
+        assert result_to_json(result)["syntax_valid"] is True
+
+    def test_result_to_json_has_syntax_valid_false(self):
+        result = self._make_result(syntax_valid=False)
+        assert result_to_json(result)["syntax_valid"] is False
+
+    def test_result_to_json_has_summary(self):
+        result = self._make_result()
+        d = result_to_json(result)
+        assert "summary" in d
+        for key in ("total", "critical", "high", "medium", "low", "info"):
+            assert key in d["summary"], f"summary missing key '{key}'"
+
+    def test_result_to_json_has_issues_list(self):
+        result = self._make_result()
+        d = result_to_json(result)
+        assert isinstance(d["issues"], list)
+
+    def test_result_to_json_empty_issues(self):
+        result = self._make_result()
+        assert result_to_json(result)["issues"] == []
+
+    # ── result_to_json() — issue serialisation ────────────────────────────────
+
+    def test_result_to_json_issue_fields(self):
+        """Each serialised issue must contain all expected keys."""
+        issue = self._make_issue()
+        result = self._make_result(issues=[issue])
+        d = result_to_json(result)
+        assert len(d["issues"]) == 1
+        issue_d = d["issues"][0]
+        for key in ("tool", "severity", "message", "line", "column", "rule", "file_path"):
+            assert key in issue_d, f"issue missing key '{key}'"
+
+    def test_result_to_json_severity_is_string(self):
+        """Severity enum must be serialised as its string value, not an object."""
+        issue = self._make_issue(severity=Severity.CRITICAL)
+        result = self._make_result(issues=[issue])
+        d = result_to_json(result)
+        assert d["issues"][0]["severity"] == "CRITICAL"
+
+    def test_result_to_json_none_fields_preserved(self):
+        """Optional fields (line, column, rule, file_path) that are None stay None."""
+        issue = self._make_issue(line=None, column=None, rule=None, file_path=None)
+        result = self._make_result(issues=[issue])
+        d = result_to_json(result)
+        issue_d = d["issues"][0]
+        assert issue_d["line"] is None
+        assert issue_d["column"] is None
+        assert issue_d["rule"] is None
+        assert issue_d["file_path"] is None
+
+    def test_result_to_json_multiple_issues(self):
+        """All issues are serialised when there is more than one."""
+        issues = [
+            self._make_issue(severity=Severity.CRITICAL, message="bad"),
+            self._make_issue(severity=Severity.LOW, message="minor"),
+        ]
+        result = self._make_result(issues=issues)
+        d = result_to_json(result)
+        assert len(d["issues"]) == 2
+        messages = {i["message"] for i in d["issues"]}
+        assert messages == {"bad", "minor"}
+
+    # ── result_to_json() — round-trip / JSON validity ─────────────────────────
+
+    def test_result_to_json_is_json_serialisable(self):
+        """result_to_json() output must be serialisable with json.dumps() without error."""
+        issue = self._make_issue()
+        result = self._make_result(issues=[issue])
+        try:
+            raw = json.dumps(result_to_json(result))
+        except (TypeError, ValueError) as exc:
+            pytest.fail(f"result_to_json() output is not JSON-serialisable: {exc}")
+        assert isinstance(raw, str)
+
+    def test_result_to_json_round_trip(self):
+        """Serialise → deserialise → values must match the original result."""
+        issue = self._make_issue(
+            tool="yamllint",
+            severity=Severity.HIGH,
+            message="trailing spaces",
+            line=10,
+            column=1,
+            rule="trailing-spaces",
+        )
+        result = self._make_result(
+            file_path="/tmp/check.yaml",
+            syntax_valid=True,
+            issues=[issue],
+        )
+        raw = json.dumps(result_to_json(result))
+        restored = json.loads(raw)
+
+        assert restored["file_path"] == "/tmp/check.yaml"
+        assert restored["syntax_valid"] is True
+        assert len(restored["issues"]) == 1
+        ri = restored["issues"][0]
+        assert ri["tool"] == "yamllint"
+        assert ri["severity"] == "HIGH"
+        assert ri["message"] == "trailing spaces"
+        assert ri["line"] == 10
+        assert ri["column"] == 1
+        assert ri["rule"] == "trailing-spaces"
+
+    # ── print_json_result() — stdout validity ─────────────────────────────────
+
+    def test_print_json_result_single_emits_object(self, capsys):
+        """Single result → stdout is a JSON object (not an array)."""
+        result = self._make_result()
+        print_json_result([result])
+        captured = capsys.readouterr().out
+        parsed = json.loads(captured)
+        assert isinstance(parsed, dict)
+
+    def test_print_json_result_multiple_emits_array(self, capsys):
+        """Multiple results → stdout is a JSON array."""
+        results = [self._make_result("a.yaml"), self._make_result("b.yaml")]
+        print_json_result(results)
+        captured = capsys.readouterr().out
+        parsed = json.loads(captured)
+        assert isinstance(parsed, list)
+        assert len(parsed) == 2
+
+    def test_print_json_result_valid_json(self, capsys):
+        """Output must be parseable by json.loads() without error."""
+        issue = self._make_issue(severity=Severity.CRITICAL)
+        result = self._make_result(syntax_valid=False, issues=[issue])
+        print_json_result([result])
+        captured = capsys.readouterr().out
+        try:
+            json.loads(captured)
+        except json.JSONDecodeError as exc:
+            pytest.fail(f"print_json_result() emitted invalid JSON: {exc}")
+
+    def test_print_json_result_no_ansi_codes(self, capsys):
+        """JSON output must not contain ANSI escape sequences."""
+        result = self._make_result(issues=[self._make_issue(severity=Severity.CRITICAL)])
+        print_json_result([result])
+        captured = capsys.readouterr().out
+        assert "\x1b[" not in captured, "ANSI escape codes found in JSON output"
+
+    def test_print_json_result_contains_all_top_level_keys(self, capsys):
+        """The JSON object must contain file_path, syntax_valid, summary, and issues."""
+        result = self._make_result()
+        print_json_result([result])
+        captured = capsys.readouterr().out
+        parsed = json.loads(captured)
+        for key in ("file_path", "syntax_valid", "summary", "issues"):
+            assert key in parsed, f"Top-level key '{key}' missing from JSON output"
+
+    def test_print_json_result_summary_counts_correct(self, capsys):
+        """Summary counts in JSON must match the actual issues."""
+        issues = [
+            self._make_issue(severity=Severity.CRITICAL),
+            self._make_issue(severity=Severity.HIGH),
+            self._make_issue(severity=Severity.MEDIUM),
+        ]
+        result = self._make_result(issues=issues)
+        print_json_result([result])
+        parsed = json.loads(capsys.readouterr().out)
+        assert parsed["summary"]["total"] == 3
+        assert parsed["summary"]["critical"] == 1
+        assert parsed["summary"]["high"] == 1
+        assert parsed["summary"]["medium"] == 1
+
+    # ── --format json CLI flag ────────────────────────────────────────────────
+
+    def test_format_flag_accepted_json(self, clean_file):
+        """--format json is accepted by argparse without SystemExit."""
+        with patch("sys.argv", ["yaml-validator", "--format", "json", clean_file]):
+            with patch("yaml_validator.cli.check_dependencies") as mock_deps:
+                mock_deps.return_value = ToolAvailability(yamllint=False, checkov=False)
+                with patch("yaml_validator.cli.validate_yaml_file") as mock_val:
+                    mock_val.return_value = self._make_result(file_path=clean_file)
+                    try:
+                        from yaml_validator import cli
+
+                        cli.main()
+                    except SystemExit as exc:
+                        assert exc.code == 0, f"Expected exit 0, got {exc.code}"
+
+    def test_format_flag_accepted_text(self, clean_file):
+        """--format text (explicit) is accepted by argparse without SystemExit."""
+        with patch("sys.argv", ["yaml-validator", "--format", "text", clean_file]):
+            with patch("yaml_validator.cli.check_dependencies") as mock_deps:
+                mock_deps.return_value = ToolAvailability(yamllint=False, checkov=False)
+                with patch("yaml_validator.cli.validate_yaml_file") as mock_val:
+                    mock_val.return_value = self._make_result(file_path=clean_file)
+                    try:
+                        from yaml_validator import cli
+
+                        cli.main()
+                    except SystemExit as exc:
+                        assert exc.code == 0, f"Expected exit 0, got {exc.code}"
+
+    def test_format_flag_short_f(self, clean_file):
+        """-f json (short form) is accepted by argparse."""
+        with patch("sys.argv", ["yaml-validator", "-f", "json", clean_file]):
+            with patch("yaml_validator.cli.check_dependencies") as mock_deps:
+                mock_deps.return_value = ToolAvailability(yamllint=False, checkov=False)
+                with patch("yaml_validator.cli.validate_yaml_file") as mock_val:
+                    mock_val.return_value = self._make_result(file_path=clean_file)
+                    try:
+                        from yaml_validator import cli
+
+                        cli.main()
+                    except SystemExit as exc:
+                        assert exc.code == 0, f"Expected exit 0, got {exc.code}"
+
+    def test_format_json_produces_valid_json_via_subprocess(self, clean_file):
+        """End-to-end: running the tool with --format json produces valid JSON on stdout."""
+        result = subprocess.run(
+            [sys.executable, "app.py", "--format", "json", clean_file],
+            capture_output=True,
+            text=True,
+            cwd=str(Path(__file__).parent.parent),
+        )
+        try:
+            parsed = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            pytest.fail(
+                f"stdout was not valid JSON: {exc}\nstdout={result.stdout!r}\nstderr={result.stderr!r}"
+            )
+        assert isinstance(parsed, dict)
+
+    def test_format_json_no_colored_text_on_stdout(self, clean_file):
+        """--format json must not emit any ANSI escape codes on stdout."""
+        result = subprocess.run(
+            [sys.executable, "app.py", "--format", "json", clean_file],
+            capture_output=True,
+            text=True,
+            cwd=str(Path(__file__).parent.parent),
+        )
+        assert "\x1b[" not in result.stdout, (
+            f"ANSI codes found in JSON stdout:\n{result.stdout!r}"
+        )
+
+    def test_format_json_stdout_has_required_keys(self, clean_file):
+        """JSON stdout from --format json must include all required top-level keys."""
+        result = subprocess.run(
+            [sys.executable, "app.py", "--format", "json", clean_file],
+            capture_output=True,
+            text=True,
+            cwd=str(Path(__file__).parent.parent),
+        )
+        parsed = json.loads(result.stdout)
+        for key in ("file_path", "syntax_valid", "summary", "issues"):
+            assert key in parsed, f"Key '{key}' missing from JSON output"
+
+    def test_format_invalid_choice_exits_nonzero(self):
+        """An unknown --format value must cause a non-zero exit (argparse error)."""
+        result = subprocess.run(
+            [sys.executable, "app.py", "--format", "xml", "dummy.yaml"],
+            capture_output=True,
+            text=True,
+            cwd=str(Path(__file__).parent.parent),
+        )
+        assert result.returncode != 0
+
+    def test_format_default_is_text(self, clean_file):
+        """Omitting --format defaults to text mode (no JSON on stdout)."""
+        result = subprocess.run(
+            [sys.executable, "app.py", clean_file],
+            capture_output=True,
+            text=True,
+            cwd=str(Path(__file__).parent.parent),
+        )
+        # In text mode the output should NOT start with '{' or '['
+        stdout = result.stdout.strip()
+        assert not stdout.startswith("{") and not stdout.startswith("["), (
+            f"Text mode output looks like JSON: {stdout[:120]!r}"
+        )
