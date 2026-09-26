@@ -150,6 +150,14 @@ def main() -> None:
         action="store_true",
         help="Skip Checkov security checks",
     )
+    parser.add_argument(
+        "--format",
+        "-f",
+        choices=["text", "json"],
+        default="text",
+        metavar="FORMAT",
+        help="Output format: 'text' (default, coloured) or 'json' (machine-readable)",
+    )
 
     args = parser.parse_args()
 
