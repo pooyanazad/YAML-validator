@@ -1949,9 +1949,7 @@ class TestJsonOutput:
             text=True,
             cwd=str(Path(__file__).parent.parent),
         )
-        assert "\x1b[" not in result.stdout, (
-            f"ANSI codes found in JSON stdout:\n{result.stdout!r}"
-        )
+        assert "\x1b[" not in result.stdout, f"ANSI codes found in JSON stdout:\n{result.stdout!r}"
 
     def test_format_json_stdout_has_required_keys(self, clean_file):
         """JSON stdout from --format json must include all required top-level keys."""

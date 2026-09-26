@@ -118,6 +118,7 @@ def print_summary_table(summary: dict[str, int]) -> None:
         bold=True,
     )
 
+
 def result_to_json(result: ValidationResult) -> dict:
     """Convert a ValidationResult dataclass to a plain, JSON-serialisable dict."""
     return {
