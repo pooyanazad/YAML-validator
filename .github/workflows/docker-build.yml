@@ -560,14 +560,35 @@ jobs:
           tail -20 README.md
 
       - name: Commit and push README
+        env:
+          RELEASE_BRANCH: release-notes/${{ needs.setup.outputs.version }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add README.md
-          git diff --cached --quiet && echo "No README changes" || {
+          if git diff --cached --quiet; then
+            echo "No README changes"
+          else
+            git checkout -b "$RELEASE_BRANCH"
             git commit -m "docs: update release notes for ${{ needs.setup.outputs.version }} [skip ci]"
-            git push
-          }
+            git push --force-with-lease origin "$RELEASE_BRANCH"
+          fi
+
+      - name: Open release notes pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BRANCH: release-notes/${{ needs.setup.outputs.version }}
+        run: |
+          if git ls-remote --exit-code --heads origin "$RELEASE_BRANCH" >/dev/null 2>&1; then
+            gh pr view "$RELEASE_BRANCH" >/dev/null 2>&1 || \
+              gh pr create \
+                --base main \
+                --head "$RELEASE_BRANCH" \
+                --title "docs: update release notes for ${{ needs.setup.outputs.version }}" \
+                --body "Automated release-notes update for \`${{ needs.setup.outputs.version }}\`. Merge after required checks pass."
+          else
+            echo "No release-notes branch was created; skipping PR."
+          fi
 
   # ── 6. [RELEASE] GITHUB PACKAGE ──────────────────────────────────────────────
   release-package:
