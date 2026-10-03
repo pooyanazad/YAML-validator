@@ -10,12 +10,15 @@ Coloured printing helpers used throughout the package.
   print_json_result()    — serialise one-or-more results as JSON to stdout
   results_to_sarif()     — convert results to a SARIF v2.1.0 log (dict)
   print_sarif_result()   — serialise results as SARIF JSON to stdout
+  results_to_junit()     — convert results to a JUnit XML string
+  print_junit_result()   — write results as JUnit XML to stdout
 """
 
 from __future__ import annotations
 
 import json
 import os
+import xml.etree.ElementTree as ET  # noqa: S405 - only used to build XML, never to parse
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -254,12 +257,79 @@ def print_sarif_result(results: list) -> None:  # list[ValidationResult]
     print(json.dumps(results_to_sarif(results), indent=2, ensure_ascii=False))
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# JUnit XML
+# ─────────────────────────────────────────────────────────────────────────────
+def results_to_junit(results: list) -> str:  # list[ValidationResult]
+    """Convert validation results into a JUnit XML document.
+
+    One <testsuite> per file, one <testcase> per issue. CRITICAL/HIGH issues are
+    reported as <failure> (matching the CLI exit code); MEDIUM/LOW/INFO are
+    reported as <skipped> so they stay visible without failing the build.
+    A file with no issues gets a single passing testcase.
+    """
+    root = ET.Element("testsuites", name="yaml-validator")
+    total_tests = total_failures = total_skipped = 0
+
+    for result in results:
+        suite = ET.SubElement(root, "testsuite", name=result.file_path)
+        failures = skipped = 0
+
+        if not result.issues:
+            ET.SubElement(suite, "testcase", classname=result.file_path, name="validation")
+
+        for issue in result.issues:
+            location = ""
+            if issue.line:
+                location = f"line {issue.line}"
+                if issue.column:
+                    location += f", column {issue.column}"
+            name = f"{issue.tool}/{issue.rule}" if issue.rule else issue.tool
+            case_name = f"{name} ({location})" if location else name
+            case = ET.SubElement(suite, "testcase", classname=result.file_path, name=case_name)
+
+            attrs = {"message": issue.message, "type": issue.severity.value}
+            if issue.severity in (Severity.CRITICAL, Severity.HIGH):
+                failures += 1
+                node = ET.SubElement(case, "failure", attrs)
+            else:
+                skipped += 1
+                node = ET.SubElement(case, "skipped", attrs)
+            node.text = f"[{issue.severity.value}] {issue.message}"
+            if location:
+                node.text += f" ({location})"
+
+        count = len(result.issues) or 1
+        suite.set("tests", str(count))
+        suite.set("failures", str(failures))
+        suite.set("errors", "0")
+        suite.set("skipped", str(skipped))
+        total_tests += count
+        total_failures += failures
+        total_skipped += skipped
+
+    root.set("tests", str(total_tests))
+    root.set("failures", str(total_failures))
+    root.set("errors", "0")
+    root.set("skipped", str(total_skipped))
+
+    ET.indent(root)
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode")
+
+
+def print_junit_result(results: list) -> None:  # list[ValidationResult]
+    """Write results as JUnit XML to stdout (no ANSI codes)."""
+    print(results_to_junit(results))
+
+
 __all__ = [
     "print_colored",
     "print_issues",
     "print_summary_table",
     "print_json_result",
+    "print_junit_result",
     "print_sarif_result",
     "result_to_json",
+    "results_to_junit",
     "results_to_sarif",
 ]

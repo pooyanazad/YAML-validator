@@ -23,6 +23,7 @@ from yaml_validator.output import (
     print_colored,
     print_issues,
     print_json_result,
+    print_junit_result,
     print_sarif_result,
     print_summary_table,
 )
@@ -159,12 +160,13 @@ def main() -> None:  # noqa: PLR0912, PLR0915
     parser.add_argument(
         "--format",
         "-f",
-        choices=["text", "json", "sarif"],
+        choices=["text", "json", "sarif", "junit"],
         default="text",
         metavar="FORMAT",
         help=(
-            "Output format: 'text' (default, coloured), 'json' (machine-readable) "
-            "or 'sarif' (SARIF v2.1.0, for GitHub code scanning)"
+            "Output format: 'text' (default, coloured), 'json' (machine-readable), "
+            "'sarif' (SARIF v2.1.0, for GitHub code scanning) or "
+            "'junit' (JUnit XML, for CI systems)"
         ),
     )
 
@@ -213,6 +215,8 @@ def main() -> None:  # noqa: PLR0912, PLR0915
         print_json_result(results)
     elif args.format == "sarif":
         print_sarif_result(results)
+    elif args.format == "junit":
+        print_junit_result(results)
     # Combined summary for multi-file runs (text mode only)
     if not json_mode and len(yaml_files) > 1:
         print_colored("\n" + "=" * 60, Severity.INFO)
