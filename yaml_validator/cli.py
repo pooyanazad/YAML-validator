@@ -23,6 +23,7 @@ from yaml_validator.output import (
     print_colored,
     print_issues,
     print_json_result,
+    print_sarif_result,
     print_summary_table,
 )
 from yaml_validator.validators import validate_yaml_file
@@ -158,10 +159,13 @@ def main() -> None:  # noqa: PLR0912, PLR0915
     parser.add_argument(
         "--format",
         "-f",
-        choices=["text", "json"],
+        choices=["text", "json", "sarif"],
         default="text",
         metavar="FORMAT",
-        help="Output format: 'text' (default, coloured) or 'json' (machine-readable)",
+        help=(
+            "Output format: 'text' (default, coloured), 'json' (machine-readable) "
+            "or 'sarif' (SARIF v2.1.0, for GitHub code scanning)"
+        ),
     )
 
     args = parser.parse_args()
@@ -178,7 +182,8 @@ def main() -> None:  # noqa: PLR0912, PLR0915
 
     tools = check_dependencies()
 
-    json_mode = args.format == "json"
+    # Any non-text format is machine-readable: keep stdout free of decoration.
+    json_mode = args.format != "text"
 
     results = []
     has_critical_high = False
@@ -203,9 +208,11 @@ def main() -> None:  # noqa: PLR0912, PLR0915
             has_critical_high = True
         total_issues += result.summary["total"]
 
-    # ── JSON output (single emit at the end) ──────────────────────────────────
-    if json_mode:
+    # ── Machine-readable output (single emit at the end) ──────────────────────
+    if args.format == "json":
         print_json_result(results)
+    elif args.format == "sarif":
+        print_sarif_result(results)
     # Combined summary for multi-file runs (text mode only)
     if not json_mode and len(yaml_files) > 1:
         print_colored("\n" + "=" * 60, Severity.INFO)

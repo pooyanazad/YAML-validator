@@ -8,11 +8,14 @@ Coloured printing helpers used throughout the package.
   print_summary_table()  — tabular summary of severity counts
   result_to_json()       — convert a ValidationResult to a serialisable dict
   print_json_result()    — serialise one-or-more results as JSON to stdout
+  results_to_sarif()     — convert results to a SARIF v2.1.0 log (dict)
+  print_sarif_result()   — serialise results as SARIF JSON to stdout
 """
 
 from __future__ import annotations
 
 import json
+import os
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -36,6 +39,7 @@ except ImportError:
         RESET_ALL = ""
 
 
+from yaml_validator import __version__
 from yaml_validator.models import SEVERITY_COLORS, Severity, ValidationIssue
 
 
@@ -152,10 +156,110 @@ def print_json_result(results: list) -> None:  # list[ValidationResult]
     print(json.dumps(output, indent=2, ensure_ascii=False))
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SARIF v2.1.0
+# ─────────────────────────────────────────────────────────────────────────────
+SARIF_SCHEMA_URI = "https://json.schemastore.org/sarif-2.1.0.json"
+SARIF_VERSION = "2.1.0"
+
+# SARIF only knows error / warning / note; GitHub additionally reads the
+# numeric "security-severity" rule property to bucket alerts.
+_SARIF_LEVEL = {
+    Severity.CRITICAL: "error",
+    Severity.HIGH: "error",
+    Severity.MEDIUM: "warning",
+    Severity.LOW: "note",
+    Severity.INFO: "note",
+}
+_SARIF_SECURITY_SEVERITY = {
+    Severity.CRITICAL: "9.5",
+    Severity.HIGH: "8.0",
+    Severity.MEDIUM: "5.0",
+    Severity.LOW: "3.0",
+    Severity.INFO: "1.0",
+}
+
+
+def _sarif_uri(path: str) -> str:
+    """Return a forward-slash URI, relative to the cwd when possible."""
+    try:
+        rel = os.path.relpath(path)
+        if not rel.startswith(".."):
+            path = rel
+    except ValueError:  # different drive on Windows
+        pass
+    return path.replace(os.sep, "/")
+
+
+def results_to_sarif(results: list) -> dict:  # list[ValidationResult]
+    """Convert validation results into a SARIF v2.1.0 log (JSON-serialisable dict)."""
+    rules: dict[str, dict] = {}
+    sarif_results: list[dict] = []
+
+    for result in results:
+        for issue in result.issues:
+            rule_id = f"{issue.tool}/{issue.rule}" if issue.rule else issue.tool
+            if rule_id not in rules:
+                rules[rule_id] = {
+                    "id": rule_id,
+                    "shortDescription": {"text": issue.rule or issue.tool},
+                    "defaultConfiguration": {"level": _SARIF_LEVEL[issue.severity]},
+                    "properties": {
+                        "security-severity": _SARIF_SECURITY_SEVERITY[issue.severity],
+                        "tags": [issue.tool],
+                    },
+                }
+
+            physical: dict = {
+                "artifactLocation": {"uri": _sarif_uri(issue.file_path or result.file_path)}
+            }
+            if issue.line and issue.line >= 1:
+                region: dict = {"startLine": issue.line}
+                if issue.column and issue.column >= 1:
+                    region["startColumn"] = issue.column
+                physical["region"] = region
+
+            sarif_results.append(
+                {
+                    "ruleId": rule_id,
+                    "ruleIndex": list(rules).index(rule_id),
+                    "level": _SARIF_LEVEL[issue.severity],
+                    "message": {"text": issue.message},
+                    "locations": [{"physicalLocation": physical}],
+                    "properties": {"severity": issue.severity.value},
+                }
+            )
+
+    return {
+        "$schema": SARIF_SCHEMA_URI,
+        "version": SARIF_VERSION,
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "yaml-validator",
+                        "version": __version__,
+                        "informationUri": "https://github.com/pooyanazad/YAML-validator",
+                        "rules": list(rules.values()),
+                    }
+                },
+                "results": sarif_results,
+            }
+        ],
+    }
+
+
+def print_sarif_result(results: list) -> None:  # list[ValidationResult]
+    """Serialise results as a SARIF v2.1.0 log to stdout (no ANSI codes)."""
+    print(json.dumps(results_to_sarif(results), indent=2, ensure_ascii=False))
+
+
 __all__ = [
     "print_colored",
     "print_issues",
     "print_summary_table",
     "print_json_result",
+    "print_sarif_result",
     "result_to_json",
+    "results_to_sarif",
 ]
