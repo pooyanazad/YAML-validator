@@ -483,8 +483,9 @@ jobs:
     needs: [setup, release-image]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     outputs:
-      commits: ${{ steps.collect.outputs.commits }}
-      date:    ${{ steps.collect.outputs.date }}
+      commits:    ${{ steps.collect.outputs.commits }}
+      date:       ${{ steps.collect.outputs.date }}
+      latest_tag: ${{ steps.collect.outputs.latest_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -493,15 +494,20 @@ jobs:
 
       - name: Collect commits since last release
         id: collect
+        env:
+          PREV_TAG: ${{ needs.setup.outputs.latest_tag }}
         run: |
           DATE=$(date +%Y-%m-%d)
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          # Re-use the previous tag already computed by the setup job instead
+          # of calling git describe again (which can return unexpected results
+          # depending on the checkout state at this point in the pipeline).
+          LATEST_TAG="${PREV_TAG}"
           echo "Latest tag found: ${LATEST_TAG}"
 
           if [ -z "$LATEST_TAG" ]; then
             COMMITS=$(git log --pretty=format:"* %s (%h)" --no-merges)
           else
-            COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"* %s (%h)" --no-merges)
+            COMMITS=$(git log "${LATEST_TAG}"..HEAD --pretty=format:"* %s (%h)" --no-merges)
           fi
 
           if [ -z "$COMMITS" ]; then
@@ -513,7 +519,8 @@ jobs:
             echo "$COMMITS"
             echo "EOF"
           } >> $GITHUB_OUTPUT
-          echo "date=${DATE}" >> $GITHUB_OUTPUT
+          echo "date=${DATE}"       >> $GITHUB_OUTPUT
+          echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
 
           echo "Commits since ${LATEST_TAG}:"
           echo "$COMMITS"
