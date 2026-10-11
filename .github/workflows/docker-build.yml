@@ -19,6 +19,7 @@ permissions:
   contents: write
   packages: write
   actions: write
+  pull-requests: write
 
 env:
   REGISTRY: docker.io
@@ -594,6 +595,7 @@ jobs:
           fi
 
       - name: Open release notes pull request
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_BRANCH: release-notes/${{ needs.setup.outputs.version }}
@@ -604,7 +606,7 @@ jobs:
                 --base main \
                 --head "$RELEASE_BRANCH" \
                 --title "docs: update release notes for ${{ needs.setup.outputs.version }}" \
-                --body "Automated release-notes update for \`${{ needs.setup.outputs.version }}\`. Merge after required checks pass."
+                --body "Automated release-notes update for \`${{ needs.setup.outputs.version }}\`. Merge after required checks pass." || echo "Notice: Could not open PR automatically (check repo workflow permissions). Branch $RELEASE_BRANCH is pushed."
           else
             echo "No release-notes branch was created; skipping PR."
           fi
