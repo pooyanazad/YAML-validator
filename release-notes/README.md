@@ -24,7 +24,7 @@ Monthly scheduled runs create a release only when the source package version is 
 
 **Refresh Release Notes is not a step in publishing 3.5.0.** To repair the old 3.4.0 description, run it on `main` with `tag=v3.4.0-20261011`. It does not change README, move tags, rebuild Docker, or replace PyPI files.
 
-For a failed PyPI run, fix the reported account/environment issue, then run **Release & Publish to PyPI** on `main` with the existing full release tag. The workflow requires an existing published GitHub release and matching tag/package version. An already published PyPI version is left unchanged; network/server failures are errors, not evidence that a version is unpublished. Inspect PyPI manually if an earlier upload was incomplete: retries do not silently replace or finish an existing version.
+For a failed PyPI run, fix the reported workflow or account/environment issue, then start a **new** run of **Release & Publish to PyPI** on `main` with the existing full release tag. If the workflow file changed, do not use **Re-run jobs** on the old run: a rerun uses its original workflow revision. The new run uses the repaired workflow while still testing and packaging the existing tag's source. Do not delete/recreate the tag or rerun Docker publication to retry PyPI. The workflow requires an existing published GitHub release and matching tag/package version. An already published PyPI version is left unchanged; network/server failures are errors, not evidence that a version is unpublished. Inspect PyPI manually if an earlier upload was incomplete: retries do not silently replace or finish an existing version.
 
 ## Write accurate highlights
 
