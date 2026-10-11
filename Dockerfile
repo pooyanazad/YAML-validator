@@ -23,11 +23,11 @@ ARG PACKAGE_VERSION=unknown
 ARG SOURCE_REVISION=unknown
 
 # OCI image labels for discoverability and traceability
-LABEL org.opencontainers.image.title="YAML Validator" \
+LABEL org.opencontainers.image.title="yamlguard" \
       org.opencontainers.image.description="Validate YAML files for syntax errors, style issues, and security misconfigurations." \
       org.opencontainers.image.version="${PACKAGE_VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
-      org.opencontainers.image.source="https://github.com/pooyanazad/YAML-validator" \
+      org.opencontainers.image.source="https://github.com/pooyanazad/yamlguard" \
       org.opencontainers.image.licenses="MIT"
 
 # Copy the pre-built virtual environment from the builder stage
@@ -39,6 +39,7 @@ RUN mkdir -p /data
 
 # Copy only the application source — no test files, no dev tools
 COPY app.py .
+COPY yamlguard/ ./yamlguard/
 COPY yaml_validator/ ./yaml_validator/
 COPY entrypoint.sh .
 

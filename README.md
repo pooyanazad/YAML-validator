@@ -1,12 +1,12 @@
 # yamlguard
 
-[![CI](https://github.com/pooyanazad/YAML-validator/actions/workflows/docker-build.yml/badge.svg)](https://github.com/pooyanazad/YAML-validator/actions/workflows/docker-build.yml)
+[![CI](https://github.com/pooyanazad/yamlguard/actions/workflows/docker-build.yml/badge.svg)](https://github.com/pooyanazad/yamlguard/actions/workflows/docker-build.yml)
 [![PyPI](https://img.shields.io/pypi/v/yamlguard.svg)](https://pypi.org/project/yamlguard/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Check your YAML files before you commit or deploy them. **yamlguard** catches syntax errors and style issues, and can scan supported infrastructure files for security problems with Checkov.
 
-Install the `yamlguard` CLI from PyPI, or use the Docker image `pooyanazad/yaml-checker`. Both run the same validator; Docker includes Checkov.
+Install the `yamlguard` CLI from PyPI, or use the Docker image `pooyanazad/yaml-checker`. Both run the same validator; Docker includes Checkov. The current Docker release uses the earlier image name; future releases will use `pooyanazad/yamlguard`.
 
 ## Install and run
 
@@ -54,24 +54,24 @@ With Docker installed, open a terminal in the folder containing your YAML files 
 **Linux / macOS:**
 
 ```bash
-docker run --rm -v "$(pwd):/data:ro" pooyanazad/yaml-checker:latest config.yaml
+docker run --rm -v "$(pwd):/data:ro" pooyanazad/yaml-checker:v3.5.0-20261011 config.yaml
 ```
 
 **Windows — PowerShell:**
 
 ```powershell
-docker run --rm -v "${PWD}:/data:ro" pooyanazad/yaml-checker:latest config.yaml
+docker run --rm -v "${PWD}:/data:ro" pooyanazad/yaml-checker:v3.5.0-20261011 config.yaml
 ```
 
 **Windows — Command Prompt:**
 
 ```bat
-docker run --rm -v "%cd%:/data:ro" pooyanazad/yaml-checker:latest config.yaml
+docker run --rm -v "%cd%:/data:ro" pooyanazad/yaml-checker:v3.5.0-20261011 config.yaml
 ```
 
 These commands mount your current folder read-only at `/data`. Use paths within that folder, such as `config.yaml` or `./configs/`. Files must be readable by the container's non-root user.
 
-Images support `linux/amd64` and `linux/arm64`. For repeatable runs, replace `latest` with the versioned Docker tag shown under **Latest release**.
+Images support `linux/amd64` and `linux/arm64`. The examples use the published 3.5.0 image. Use the Docker image and versioned tag shown under **Latest release** when choosing another release.
 
 ## Everyday examples
 
@@ -86,7 +86,7 @@ yamlguard deployment.yaml --timeout 60       # Limit each validator subprocess t
 
 With Docker, pass these same arguments after the image name. For example, replace `config.yaml` in the Docker command with `./configs/ --no-security`.
 
-Run `yamlguard --help` for all options. Missing paths are skipped with a warning; the command fails if no files remain.
+Run `yamlguard --help` for all options. You can also run the CLI as `python -m yamlguard`. Missing paths are skipped with a warning; the command fails if no files remain.
 
 ## Reports and exit codes
 
@@ -112,7 +112,7 @@ Syntax errors are Critical. Lint errors are Medium and warnings are Low, so **li
 
 ## Project links
 
-[Releases](https://github.com/pooyanazad/YAML-validator/releases) · [Report an issue](https://github.com/pooyanazad/YAML-validator/issues) · [Contributing](CONTRIBUTING.md) · [Maintainer release guide](release-notes/README.md)
+[Releases](https://github.com/pooyanazad/yamlguard/releases) · [Report an issue](https://github.com/pooyanazad/yamlguard/issues) · [Contributing](CONTRIBUTING.md) · [Maintainer release guide](release-notes/README.md)
 
 ## Latest release
 

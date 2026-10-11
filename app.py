@@ -1,29 +1,22 @@
 #!/usr/bin/env python3
-"""
-YAML Validator — entry point.
+"""Compatibility entry point for yamlguard.
 
-All logic lives in the yaml_validator package:
-  yaml_validator/models.py     — Severity, ValidationIssue, ValidationResult, ToolAvailability
-  yaml_validator/validators.py — validate_yaml_syntax, run_yamllint, run_checkov, validate_yaml_file
-  yaml_validator/output.py     — print_colored, print_issues, print_summary_table
-  yaml_validator/cli.py        — check_dependencies, resolve_files, main
-
-This file is kept as the Docker / legacy entry point and re-exports every
-public symbol so that ``import app`` still works for existing test code.
+Use ``yamlguard`` or ``python -m yamlguard`` for new commands. This wrapper keeps
+``python app.py`` and existing ``import app`` callers working.
 """
 
 # ── version ───────────────────────────────────────────────────────────────────
-from yaml_validator import __version__  # noqa: F401
+from yamlguard import __version__  # noqa: F401
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
-from yaml_validator.cli import (  # noqa: F401
+from yamlguard.cli import (  # noqa: F401
     check_dependencies,
     main,
     resolve_files,
 )
 
 # ── models ────────────────────────────────────────────────────────────────────
-from yaml_validator.models import (  # noqa: F401
+from yamlguard.models import (  # noqa: F401
     SEVERITY_COLORS,
     Severity,
     ToolAvailability,
@@ -32,7 +25,7 @@ from yaml_validator.models import (  # noqa: F401
 )
 
 # ── output helpers ────────────────────────────────────────────────────────────
-from yaml_validator.output import (  # noqa: F401
+from yamlguard.output import (  # noqa: F401
     print_colored,
     print_issues,
     print_json_result,
@@ -45,7 +38,7 @@ from yaml_validator.output import (  # noqa: F401
 )
 
 # ── validators ────────────────────────────────────────────────────────────────
-from yaml_validator.validators import (  # noqa: F401
+from yamlguard.validators import (  # noqa: F401
     run_checkov,
     run_yamllint,
     validate_yaml_file,

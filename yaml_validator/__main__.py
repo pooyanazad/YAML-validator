@@ -1,6 +1,5 @@
-"""Allow the package to be run as a module: python3 -m yaml_validator"""
+"""Keep the legacy module command working through yamlguard."""
 
-from yaml_validator.cli import main
+from yamlguard.cli import main
 
-if __name__ == "__main__":
-    main()
+main()

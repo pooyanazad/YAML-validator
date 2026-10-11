@@ -126,18 +126,35 @@ def test_readme_replacement_keeps_literal_backslashes(history):
         notes.update_readme(readme, "New")
 
 
-def test_package_install_version_comes_from_source(history):
+@pytest.mark.parametrize("module_name", ["yamlguard", "yaml_validator"])
+def test_package_install_version_comes_from_source(history, module_name):
     root, _, _ = history
-    package = root / "yaml_validator"
+    package = root / module_name
     package.mkdir()
     (package / "__init__.py").write_text('__version__ = "3.4.0"\n')
     (root / "pyproject.toml").write_text('[project]\nname = "yamlguard"\n')
-    subprocess.run(["git", "add", "pyproject.toml", "yaml_validator/__init__.py"], check=True)
+    subprocess.run(["git", "add", "pyproject.toml", f"{module_name}/__init__.py"], check=True)
     subprocess.run(["git", "commit", "-qm", "chore: Package metadata"], check=True)
     notes.generate(args("HEAD", root / "body.md", version="v3.5.0-20261101"))
     body = (root / "body.md").read_text()
     assert "yamlguard==3.4.0" in body
     assert "example/validator:v3.5.0-20261101" in body
+
+
+@pytest.mark.parametrize("image", ["pooyanazad/yaml-checker", "pooyanazad/yamlguard"])
+def test_refresh_uses_the_image_from_the_released_source(history, image):
+    root, _, commit = history
+    directory = root / ".github/workflows"
+    directory.mkdir(parents=True)
+    (directory / "docker-build.yml").write_text(f"env:\n  IMAGE_NAME: {image}\n")
+    subprocess.run(["git", "add", ".github/workflows/docker-build.yml"], check=True)
+    head = commit("chore: Docker publication configuration")
+    options = args(head, root / "body.md")
+    options.image = None
+    notes.generate(options)
+    body = (root / "body.md").read_text()
+    assert f"**Docker image:** `{image}:{options.version}`" in body
+    assert f"{image}:{options.version} myfile.yaml" in body
 
 
 def test_annotated_tags_and_numeric_version_order(history):

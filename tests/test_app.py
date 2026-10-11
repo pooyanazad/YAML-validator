@@ -1,5 +1,5 @@
 """
-App functionality tests for YAML Validator.
+App functionality tests for yamlguard.
 Tests core functions directly (no Docker required).
 Run with: pytest tests/test_app.py -v
 """
@@ -33,7 +33,7 @@ from app import (
     validate_yaml_file,
     validate_yaml_syntax,
 )
-from yaml_validator.validators import (
+from yamlguard.validators import (
     LARGE_FILE_WARNING_THRESHOLD,
     warn_if_large_file,
 )
@@ -544,7 +544,7 @@ class TestValidateYamlFile:
     def test_no_security_skips_checkov(self, clean_file):
         tools = ToolAvailability(checkov=True)
 
-        with patch("yaml_validator.validators.run_checkov") as mock_run_checkov:
+        with patch("yamlguard.validators.run_checkov") as mock_run_checkov:
             validate_yaml_file(clean_file, tools, no_security=True)
 
         mock_run_checkov.assert_not_called()
@@ -553,7 +553,7 @@ class TestValidateYamlFile:
         tools = ToolAvailability(yamllint=False, checkov=False)
 
         with patch(
-            "yaml_validator.validators.os.path.getsize",
+            "yamlguard.validators.os.path.getsize",
             return_value=LARGE_FILE_WARNING_THRESHOLD + 1,
         ):
             validate_yaml_file(clean_file, tools, no_security=True)
@@ -565,7 +565,7 @@ class TestValidateYamlFile:
     def test_security_runs_by_default(self, clean_file):
         tools = ToolAvailability(checkov=True)
 
-        with patch("yaml_validator.validators.run_checkov", return_value=[]) as mock_run_checkov:
+        with patch("yamlguard.validators.run_checkov", return_value=[]) as mock_run_checkov:
             validate_yaml_file(clean_file, tools)
 
         mock_run_checkov.assert_called_once_with(clean_file, timeout=300)
@@ -592,8 +592,8 @@ class TestLargeFileWarning:
     )
     def test_does_not_warn_at_or_below_threshold(self, file_size):
         with (
-            patch("yaml_validator.validators.os.path.getsize", return_value=file_size),
-            patch("yaml_validator.validators.print_colored") as mock_print,
+            patch("yamlguard.validators.os.path.getsize", return_value=file_size),
+            patch("yamlguard.validators.print_colored") as mock_print,
         ):
             warn_if_large_file("config.yaml")
 
@@ -602,10 +602,10 @@ class TestLargeFileWarning:
     def test_warns_above_threshold(self):
         with (
             patch(
-                "yaml_validator.validators.os.path.getsize",
+                "yamlguard.validators.os.path.getsize",
                 return_value=LARGE_FILE_WARNING_THRESHOLD + 1,
             ),
-            patch("yaml_validator.validators.print_colored") as mock_print,
+            patch("yamlguard.validators.print_colored") as mock_print,
         ):
             warn_if_large_file("config.yaml")
 
@@ -616,10 +616,10 @@ class TestLargeFileWarning:
     def test_ignores_file_size_errors(self):
         with (
             patch(
-                "yaml_validator.validators.os.path.getsize",
+                "yamlguard.validators.os.path.getsize",
                 side_effect=OSError("unavailable"),
             ),
-            patch("yaml_validator.validators.print_colored") as mock_print,
+            patch("yamlguard.validators.print_colored") as mock_print,
         ):
             warn_if_large_file("missing.yaml")
 
@@ -644,12 +644,12 @@ class TestCliSecurityOption:
 
         with (
             patch.object(sys, "argv", ["app.py", "config.yaml", "--no-security"]),
-            patch("yaml_validator.cli.resolve_files", return_value=["config.yaml"]),
+            patch("yamlguard.cli.resolve_files", return_value=["config.yaml"]),
             patch(
-                "yaml_validator.cli.check_dependencies",
+                "yamlguard.cli.check_dependencies",
                 return_value=ToolAvailability(),
             ),
-            patch("yaml_validator.cli.validate_yaml_file", return_value=result) as mock_validate,
+            patch("yamlguard.cli.validate_yaml_file", return_value=result) as mock_validate,
             pytest.raises(SystemExit) as exit_info,
         ):
             validator.main()
@@ -1313,7 +1313,7 @@ class TestHelpVersionFlags:
         """--version output contains the program name."""
         result = self._run("--version")
         combined = result.stdout + result.stderr
-        assert "yaml-validator" in combined.lower() or "yaml_validator" in combined.lower(), (
+        assert "yamlguard" in combined.lower(), (
             f"Program name missing from --version output: {combined!r}"
         )
 
@@ -1880,14 +1880,14 @@ class TestJsonOutput:
     def test_format_flag_accepted_json(self, clean_file):
         """--format json is accepted by argparse without SystemExit."""
         with (
-            patch("sys.argv", ["yaml-validator", "--format", "json", clean_file]),
-            patch("yaml_validator.cli.check_dependencies") as mock_deps,
-            patch("yaml_validator.cli.validate_yaml_file") as mock_val,
+            patch("sys.argv", ["yamlguard", "--format", "json", clean_file]),
+            patch("yamlguard.cli.check_dependencies") as mock_deps,
+            patch("yamlguard.cli.validate_yaml_file") as mock_val,
         ):
             mock_deps.return_value = ToolAvailability(yamllint=False, checkov=False)
             mock_val.return_value = self._make_result(file_path=clean_file)
             try:
-                from yaml_validator import cli
+                from yamlguard import cli
 
                 cli.main()
             except SystemExit as exc:
@@ -1896,14 +1896,14 @@ class TestJsonOutput:
     def test_format_flag_accepted_text(self, clean_file):
         """--format text (explicit) is accepted by argparse without SystemExit."""
         with (
-            patch("sys.argv", ["yaml-validator", "--format", "text", clean_file]),
-            patch("yaml_validator.cli.check_dependencies") as mock_deps,
-            patch("yaml_validator.cli.validate_yaml_file") as mock_val,
+            patch("sys.argv", ["yamlguard", "--format", "text", clean_file]),
+            patch("yamlguard.cli.check_dependencies") as mock_deps,
+            patch("yamlguard.cli.validate_yaml_file") as mock_val,
         ):
             mock_deps.return_value = ToolAvailability(yamllint=False, checkov=False)
             mock_val.return_value = self._make_result(file_path=clean_file)
             try:
-                from yaml_validator import cli
+                from yamlguard import cli
 
                 cli.main()
             except SystemExit as exc:
@@ -1912,14 +1912,14 @@ class TestJsonOutput:
     def test_format_flag_short_f(self, clean_file):
         """-f json (short form) is accepted by argparse."""
         with (
-            patch("sys.argv", ["yaml-validator", "-f", "json", clean_file]),
-            patch("yaml_validator.cli.check_dependencies") as mock_deps,
-            patch("yaml_validator.cli.validate_yaml_file") as mock_val,
+            patch("sys.argv", ["yamlguard", "-f", "json", clean_file]),
+            patch("yamlguard.cli.check_dependencies") as mock_deps,
+            patch("yamlguard.cli.validate_yaml_file") as mock_val,
         ):
             mock_deps.return_value = ToolAvailability(yamllint=False, checkov=False)
             mock_val.return_value = self._make_result(file_path=clean_file)
             try:
-                from yaml_validator import cli
+                from yamlguard import cli
 
                 cli.main()
             except SystemExit as exc:

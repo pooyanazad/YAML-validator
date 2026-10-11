@@ -9,6 +9,12 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
+try:
+    from scripts.release_metadata import docker_image, package_version
+except ModuleNotFoundError:
+    # The workflows also invoke this file directly from the repository root.
+    from release_metadata import docker_image, package_version
+
 TAG_PATTERN = re.compile(r"v(\d+)\.(\d+)\.(\d+)(?:-(\d{8}))?")
 START = "<!-- RELEASE_NOTES_START -->"
 END = "<!-- RELEASE_NOTES_END -->"
@@ -127,33 +133,31 @@ def generate(args: argparse.Namespace) -> None:  # noqa: PLR0912, PLR0915
         else f"[Initial release history]({repo_url}/commits/{args.version})"
     )
     scope = f"Changes since `{base}`" if base else "Initial release"
+    image = args.image or docker_image(head)
     block = (
         f"### {args.version} — {args.date}\n\n"
         f"**{scope}** ({len(commits)} non-merge commits).\n\n"
         f"{summary}\n\n{comparison}\n\n"
-        f"**Docker image:** `{args.image}:{args.version}`\n"
+        f"**Docker image:** `{image}:{args.version}`\n"
     )
-    body = block.replace(f"### {args.version}", f"## YAML Validator {args.version}", 1)
+    body = block.replace(f"### {args.version}", f"## yamlguard {args.version}", 1)
     body += "\n### Use this release\n\n"
     # Read the package version from the released source, including historical releases.
     project = subprocess.run(
         ["git", "show", f"{head}:pyproject.toml"], capture_output=True, text=True, check=False
     )
     if project.returncode == 0 and 'name = "yamlguard"' in project.stdout:
-        init = git("show", f"{head}:yaml_validator/__init__.py")
-        package_version = re.search(r'__version__\s*=\s*"([\d.]+)"', init)
-        if not package_version:
-            raise ValueError("Cannot determine yamlguard package version")
+        version = package_version(head)
         body += (
             "PyPI installation once this package version is published (syntax and linting):\n\n"
             "```bash\n"
-            f"python -m pip install 'yamlguard=={package_version[1]}'\n"
+            f"python -m pip install 'yamlguard=={version}'\n"
             "yamlguard myfile.yaml\n```\n\n"
-            f"For Checkov scanning, install `yamlguard[security]=={package_version[1]}`.\n\n"
+            f"For Checkov scanning, install `yamlguard[security]=={version}`.\n\n"
         )
     body += (
         "Docker (includes Checkov; Linux/macOS shell):\n\n```bash\n"
-        f'docker run --rm -v "$(pwd):/data:ro" {args.image}:{args.version} myfile.yaml\n'
+        f'docker run --rm -v "$(pwd):/data:ro" {image}:{args.version} myfile.yaml\n'
         "```\n\n"
         f"[Usage and options]({repo_url}/blob/{args.version}/README.md)\n"
     )
@@ -180,8 +184,8 @@ def main() -> None:
     parser.add_argument("--previous-tag")
     parser.add_argument("--print-previous-tag", action="store_true")
     parser.add_argument("--date", default="")
-    parser.add_argument("--repository", default="pooyanazad/YAML-validator")
-    parser.add_argument("--image", default="pooyanazad/yaml-checker")
+    parser.add_argument("--repository", default="pooyanazad/yamlguard")
+    parser.add_argument("--image", help="Override the Docker image recorded in the released source")
     parser.add_argument("--readme", type=Path)
     parser.add_argument("--output", type=Path, default=Path("release-body.md"))
     args = parser.parse_args()
