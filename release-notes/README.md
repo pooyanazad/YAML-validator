@@ -12,7 +12,7 @@ PyPI Trusted Publishing must authorize owner `pooyanazad`, repository `YAML-vali
 
 Repository setting **Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests** allows automatic README PR creation. It does not make the bot approve its own PR or remove branch rules. Without it, create the README PR manually from the summary link. Keep the existing branch protections and admin bypass.
 
-Monthly scheduled runs create a release only when the source package version is new. If that version already has a GitHub release, they refresh Docker `latest` only. A manual new-release attempt using an already released package version fails with instructions instead of inventing another minor version. Versioned Docker tags from another/unknown commit cannot be overwritten; a retry can reuse a complete two-platform image from the same commit.
+Monthly scheduled runs create a release only when the source package version is new. If that version already has a GitHub release, they refresh Docker `latest` only. New releases also check PyPI before publishing Docker or GitHub. A manual new-release attempt using an already released package version fails with instructions instead of inventing another minor version. Versioned Docker tags from another/unknown commit cannot be overwritten; a retry can reuse a complete two-platform image from the same commit.
 
 ## Retry or repair an existing release
 

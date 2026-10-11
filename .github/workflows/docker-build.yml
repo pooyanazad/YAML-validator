@@ -23,7 +23,7 @@ permissions:
 
 concurrency:
   group: yamlguard-docker-${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'release' || github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' }}
 
 env:
   REGISTRY: docker.io
@@ -69,6 +69,17 @@ jobs:
             | jq -s '.' > published-releases.json
           python3 -m scripts.release_plan --head "$GITHUB_SHA" --event "$EVENT_NAME" \
             --manual-tag "$MANUAL_TAG" --releases published-releases.json --output "$GITHUB_OUTPUT"
+
+      - name: Refuse an already published PyPI version before creating a new release
+        if: steps.version.outputs.publish_release == 'true'
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.package_version }}
+        run: |
+          python3 -m scripts.pypi_status --version "$PACKAGE_VERSION" --output pypi-status.txt
+          if grep -qx 'published=true' pypi-status.txt; then
+            echo "::error::This package version already exists on PyPI. Bump __version__ before creating a new release."
+            exit 1
+          fi
 
   # ── 2. BUILD ─────────────────────────────────────────────────────────────────
   build:
