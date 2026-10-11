@@ -18,7 +18,9 @@ Monthly scheduled runs create a release only when the source package version is 
 
 The repository, CLI, and primary Python module are named `yamlguard`. Older `yaml_validator` imports, `python -m yaml_validator`, and `python app.py` remain compatibility entry points. New code should use `yamlguard`.
 
-New Docker publications use `pooyanazad/yamlguard`. Before publishing, create that **public** repository on Docker Hub and make sure `DOCKERHUB_TOKEN` has pull/push access to it. Existing versioned images through 3.5.0 remain at `pooyanazad/yaml-checker`; do not delete or retag them. The README continues to link the published 3.5.0 image until the first image under the new name is available. Once it is published, update the usage examples to its verified `pooyanazad/yamlguard:vX.Y.Z-YYYYMMDD` tag. Release-note repairs automatically read the image name from each tag's source, so older releases keep their real image locations.
+Docker publications from 3.5.1 onward use `pooyanazad/yamlguard`. The repository must be **public**, and `DOCKERHUB_TOKEN` must allow pushing to it. Docker Hub can create the repository on its first successful push, or you can create it beforehand to choose its visibility. A personal token's description is just a label; renaming the GitHub repository does not require replacing an otherwise valid token.
+
+README usage examples use `pooyanazad/yamlguard:latest`; the generated **Latest release** block supplies the versioned tag for reproducible runs. Existing versioned images through 3.5.0 remain at `pooyanazad/yaml-checker`; do not delete or retag them. Release-note repairs read the image name from each tag's source, so older releases keep their real image locations.
 
 Update the repository's **About → Website** to `https://github.com/pooyanazad/yamlguard`. Existing clones can use the new remote URL:
 
