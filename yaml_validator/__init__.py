@@ -1,14 +1,5 @@
-"""
-yaml_validator package
-======================
-A modular YAML validation library with syntax, linting, and security checks.
+"""Compatibility package for older imports; use :mod:`yamlguard` in new code."""
 
-Package layout
---------------
-  models.py     — dataclasses and enums (Severity, ValidationIssue, …)
-  validators.py — core validation functions (validate_yaml_syntax, run_yamllint, …)
-  output.py     — coloured printing helpers (print_colored, print_issues, …)
-  cli.py        — argparse entry-point (main, resolve_files)
-"""
+from yamlguard import __version__
 
-__version__ = "3.5.0"
+__all__ = ["__version__"]

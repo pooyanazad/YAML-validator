@@ -27,8 +27,8 @@ concurrency:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: pooyanazad/yaml-checker
-  TEST_IMAGE: yaml-checker:ci
+  IMAGE_NAME: pooyanazad/yamlguard
+  TEST_IMAGE: yamlguard:ci
 
 # ─────────────────────────────────────────────────────────────────────────────
 jobs:
@@ -251,7 +251,7 @@ jobs:
 
       - name: Type check with mypy
         run: |
-          mypy app.py yaml_validator/ --ignore-missing-imports
+          mypy app.py yamlguard/ --ignore-missing-imports
 
   # ── 3b. SECURITY AUDIT ───────────────────────────────────────────────────────
   pip-audit:
@@ -354,7 +354,7 @@ jobs:
         run: |
           set -o pipefail
           python -m pytest tests/ -v \
-            --cov=yaml_validator --cov=app --cov-fail-under=70 \
+            --cov=yamlguard --cov=app --cov-fail-under=70 \
             --cov-report=term-missing \
             --junit-xml=test-results.xml \
             --json-report --json-report-file=test-report.json \
@@ -479,9 +479,17 @@ jobs:
         run: |
           OUTPUT=$(docker run --rm ${{ env.TEST_IMAGE }} --version)
           echo "$OUTPUT"
-          echo "$OUTPUT" | grep -q "yaml-validator" \
+          echo "$OUTPUT" | grep -q "yamlguard" \
             && echo "PASS: --version output is valid" \
             || { echo "FAIL: --version output unexpected"; exit 1; }
+
+      - name: "Mounted source must not override the image's CLI"
+        run: |
+          DATA_DIR=$(mktemp -d)
+          trap 'rm -rf "$DATA_DIR"' EXIT
+          chmod 755 "$DATA_DIR"
+          echo 'raise RuntimeError("Mounted yamlguard.py must not be imported")' > "$DATA_DIR/yamlguard.py"
+          docker run --rm -v "$DATA_DIR:/data:ro" "${{ env.TEST_IMAGE }}" --version
 
   # ── 4. [RELEASE] PUSH DOCKER IMAGE ───────────────────────────────────────────
   release-image:
@@ -653,7 +661,7 @@ jobs:
     steps:
       - name: Write job summary
         run: |
-          echo "## 🐳 YAML Validator Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 🐳 yamlguard Pipeline Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Stage | Result |" >> $GITHUB_STEP_SUMMARY
           echo "|---|:---:|" >> $GITHUB_STEP_SUMMARY

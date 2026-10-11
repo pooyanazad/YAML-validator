@@ -81,7 +81,7 @@ class TestSarifContent:
     def test_version_and_tool_name(self):
         log = results_to_sarif([_result([])])
         assert log["version"] == "2.1.0"
-        assert log["runs"][0]["tool"]["driver"]["name"] == "yaml-validator"
+        assert log["runs"][0]["tool"]["driver"]["name"] == "yamlguard"
 
     @pytest.mark.parametrize(
         ("severity", "level"),

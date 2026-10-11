@@ -60,22 +60,23 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/pooyanazad/YAML-validator"
-Repository = "https://github.com/pooyanazad/YAML-validator"
-"Bug Tracker" = "https://github.com/pooyanazad/YAML-validator/issues"
-Changelog = "https://github.com/pooyanazad/YAML-validator/releases"
+Homepage = "https://github.com/pooyanazad/yamlguard"
+Repository = "https://github.com/pooyanazad/yamlguard"
+"Bug Tracker" = "https://github.com/pooyanazad/yamlguard/issues"
+Changelog = "https://github.com/pooyanazad/yamlguard/releases"
 
 [project.scripts]
-yamlguard = "yaml_validator.cli:main"
+yamlguard = "yamlguard.cli:main"
 
 [tool.hatch.version]
-path = "yaml_validator/__init__.py"
+path = "yamlguard/__init__.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["yaml_validator"]
+packages = ["yamlguard", "yaml_validator"]
 
 [tool.hatch.build.targets.sdist]
 include = [
+    "/yamlguard",
     "/yaml_validator",
     "/tests",
     "/scripts",

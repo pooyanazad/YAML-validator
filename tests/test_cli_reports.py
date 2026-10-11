@@ -7,9 +7,9 @@ from unittest.mock import patch
 
 import pytest
 
-from yaml_validator import cli
-from yaml_validator.models import ToolAvailability
-from yaml_validator.validators import validate_yaml_file
+from yamlguard import cli
+from yamlguard.models import ToolAvailability
+from yamlguard.validators import validate_yaml_file
 
 
 @pytest.mark.parametrize("output_format", ["json", "sarif", "junit"])
@@ -45,6 +45,6 @@ def test_reports_with_missing_checkov_and_path(output_format, tmp_path, capsys):
 def test_large_file_does_not_add_text_to_quiet_report(tmp_path, capsys):
     good = tmp_path / "large.yaml"
     good.write_text("---\nkey: value\n" + "# comment\n" * 110000)
-    with patch("yaml_validator.validators.run_yamllint", return_value=[]):
+    with patch("yamlguard.validators.run_yamllint", return_value=[]):
         validate_yaml_file(str(good), ToolAvailability(checkov=False), quiet=True)
     assert capsys.readouterr().out == ""

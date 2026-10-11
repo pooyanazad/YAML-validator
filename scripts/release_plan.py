@@ -4,19 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.release_notes import TAG_PATTERN, git, previous_tag, tag_key
-
-
-def package_version(head: str) -> str:
-    source = git("show", f"{head}:yaml_validator/__init__.py")
-    match = re.search(r'^__version__ = "(\d+\.\d+\.\d+)"$', source, re.MULTILINE)
-    if not match:
-        raise ValueError("Package must define one stable X.Y.Z version")
-    return match[1]
+from scripts.release_metadata import package_version
+from scripts.release_notes import TAG_PATTERN, previous_tag, tag_key
 
 
 def validate_tag(tag: str, head: str) -> str:
