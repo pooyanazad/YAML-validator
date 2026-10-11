@@ -73,6 +73,8 @@ def collect_commits(base: str, head: str) -> list[tuple[str, str]]:
 
 def highlights(version: str, base: str, commits: list[tuple[str, str]]) -> str:
     fragment = Path("release-notes") / f"{version}.md"
+    if not fragment.exists():
+        fragment = Path("release-notes") / f"{version.split('-', 1)[0]}.md"
     if fragment.exists():
         content = fragment.read_text(encoding="utf-8")
         marker = f"<!-- previous-tag: {base} -->"
@@ -133,7 +135,7 @@ def generate(args: argparse.Namespace) -> None:  # noqa: PLR0912, PLR0915
     )
     body = block.replace(f"### {args.version}", f"## YAML Validator {args.version}", 1)
     body += "\n### Use this release\n\n"
-    # Package versions come from source, not the independent Docker tag counter.
+    # Read the package version from the released source, including historical releases.
     project = subprocess.run(
         ["git", "show", f"{head}:pyproject.toml"], capture_output=True, text=True, check=False
     )
