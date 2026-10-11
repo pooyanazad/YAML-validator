@@ -146,6 +146,11 @@ def test_annotated_tags_and_numeric_version_order(history):
     assert notes.previous_tag("v3.10.0-20270201", head) == "v3.9.0-20270101"
 
 
+def test_new_tests_are_not_presented_as_product_features():
+    assert notes.category("Add tests that check SARIF against its schema") == "Tests"
+    assert notes.category("Add SARIF output") == "Features"
+
+
 @pytest.mark.parametrize("version", ["$(whoami)", "--all", "v3.4", "v3.4.0/inject"])
 def test_invalid_release_tag_is_rejected(version):
     with pytest.raises(ValueError, match="Invalid release tag"):

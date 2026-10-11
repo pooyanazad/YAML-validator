@@ -46,14 +46,14 @@ def previous_tag(version: str, head: str) -> str:
 
 def category(subject: str) -> str:
     prefix = subject.split(":", 1)[0].split("(", 1)[0].lower()
+    if prefix == "test" or subject.startswith("Add tests "):
+        return "Tests"
     if prefix == "feat" or subject.startswith("Add "):
         return "Features"
     if prefix == "fix":
         return "Fixes"
     if prefix == "docs":
         return "Documentation"
-    if prefix == "test":
-        return "Tests"
     if "deps" in subject.lower() or prefix == "deps":
         return "Dependencies"
     return "Build and maintenance"
@@ -131,7 +131,7 @@ def generate(args: argparse.Namespace) -> None:  # noqa: PLR0912, PLR0915
         f"{summary}\n\n{comparison}\n\n"
         f"**Docker image:** `{args.image}:{args.version}`\n"
     )
-    body = f"## YAML Validator {args.version}\n\n" + block
+    body = block.replace(f"### {args.version}", f"## YAML Validator {args.version}", 1)
     body += "\n### Use this release\n\n"
     # Package versions come from source, not the independent Docker tag counter.
     project = subprocess.run(
