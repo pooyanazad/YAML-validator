@@ -19,10 +19,14 @@ RUN /build/venv/bin/pip install --upgrade pip --quiet && \
 # ─────────────────────────────────────────────
 FROM python:3.12-slim AS runtime
 
+ARG PACKAGE_VERSION=unknown
+ARG SOURCE_REVISION=unknown
+
 # OCI image labels for discoverability and traceability
 LABEL org.opencontainers.image.title="YAML Validator" \
       org.opencontainers.image.description="Validate YAML files for syntax errors, style issues, and security misconfigurations." \
-      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.version="${PACKAGE_VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
       org.opencontainers.image.source="https://github.com/pooyanazad/YAML-validator" \
       org.opencontainers.image.licenses="MIT"
 

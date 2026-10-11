@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       manual_tag:
-        description: 'Manual version tag (e.g. v3.4.0-20261011). Leave empty to auto-calculate next version.'
+        description: 'Optional tag matching the package version. Empty uses vX.Y.Z plus today (UTC).'
         required: false
         default: ''
         type: string
@@ -20,6 +20,10 @@ permissions:
   packages: write
   actions: write
   pull-requests: write
+
+concurrency:
+  group: yamlguard-docker-${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'release' || github.ref }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: docker.io
@@ -36,6 +40,8 @@ jobs:
     outputs:
       version:    ${{ steps.version.outputs.version }}
       latest_tag: ${{ steps.version.outputs.latest_tag }}
+      package_version: ${{ steps.version.outputs.package_version }}
+      publish_release: ${{ steps.version.outputs.publish_release }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,41 +54,21 @@ jobs:
           echo "Current UTC time: $(date -u)"
           echo "Triggered by: ${{ github.event_name }}"
 
-      - name: Generate version number
+      - name: Plan release from package version
         id: version
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MANUAL_TAG: ${{ inputs.manual_tag }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          git fetch --tags
-          DATE=$(date +%Y%m%d)
-          MAJOR="3"
-          PATCH="0"
-
-          LATEST_TAG=$(git tag -l "v${MAJOR}.*.${PATCH}-*" | sort -V | tail -n 1)
-
-          if [ -n "$MANUAL_TAG" ]; then
-            VERSION="$MANUAL_TAG"
-            echo "Using manual version tag: ${VERSION}"
-          else
-            if [ -z "$LATEST_TAG" ]; then
-              MINOR_VERSION=0
-            else
-              MINOR_VERSION=$(echo "$LATEST_TAG" | sed "s/v${MAJOR}\.\([0-9]*\)\.${PATCH}-.*/\1/")
-              MINOR_VERSION=$((MINOR_VERSION + 1))
-              while git tag -l "v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}" | grep -q "v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}"; do
-                MINOR_VERSION=$((MINOR_VERSION + 1))
-              done
-            fi
-            VERSION="v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Run releases from main after merging the release PR."
+            exit 1
           fi
-
-          # Exclude the current tag on retries; only consider ancestors of this commit.
-          LATEST_TAG=$(python3 scripts/release_notes.py --version "$VERSION" --head "$GITHUB_SHA" --print-previous-tag)
-
-          echo "version=${VERSION}"       >> $GITHUB_OUTPUT
-          echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
-          echo "✅ Next version: ${VERSION}"
-          echo "📌 Previous tag: ${LATEST_TAG}"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' \
+            | jq -s '.' > published-releases.json
+          python3 -m scripts.release_plan --head "$GITHUB_SHA" --event "$EVENT_NAME" \
+            --manual-tag "$MANUAL_TAG" --releases published-releases.json --output "$GITHUB_OUTPUT"
 
   # ── 2. BUILD ─────────────────────────────────────────────────────────────────
   build:
@@ -102,6 +88,9 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          build-args: |
+            PACKAGE_VERSION=${{ needs.setup.outputs.package_version }}
+            SOURCE_REVISION=${{ github.sha }}
           load: true
           tags: ${{ env.TEST_IMAGE }}
           cache-from: type=gha
@@ -111,7 +100,7 @@ jobs:
   image-size-check:
     name: 📏 Image Size Check
     runs-on: ubuntu-latest
-    needs: build
+    needs: [setup, build]
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -125,6 +114,9 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          build-args: |
+            PACKAGE_VERSION=${{ needs.setup.outputs.package_version }}
+            SOURCE_REVISION=${{ github.sha }}
           load: true
           tags: ${{ env.TEST_IMAGE }}
           cache-from: type=gha
@@ -158,7 +150,7 @@ jobs:
   trivy-scan:
     name: 🛡️ Trivy Container Scan
     runs-on: ubuntu-latest
-    needs: build
+    needs: [setup, build]
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -172,6 +164,9 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          build-args: |
+            PACKAGE_VERSION=${{ needs.setup.outputs.package_version }}
+            SOURCE_REVISION=${{ github.sha }}
           load: true
           tags: ${{ env.TEST_IMAGE }}
           cache-from: type=gha
@@ -219,7 +214,7 @@ jobs:
   lint:
     name: 🧹 Lint (Ruff & Mypy)
     runs-on: ubuntu-latest
-    needs: build
+    needs: [setup, build]
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -251,7 +246,7 @@ jobs:
   pip-audit:
     name: 🔐 Pip Audit (CVE Scan)
     runs-on: ubuntu-latest
-    needs: build
+    needs: [setup, build]
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -328,7 +323,7 @@ jobs:
   app-tests:
     name: 🔬 App Tests
     runs-on: ubuntu-latest
-    needs: build
+    needs: [setup, build]
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -397,7 +392,7 @@ jobs:
   test:
     name: 🧪 Docker Integration Tests
     runs-on: ubuntu-latest
-    needs: build
+    needs: [setup, build]
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -411,6 +406,9 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          build-args: |
+            PACKAGE_VERSION=${{ needs.setup.outputs.package_version }}
+            SOURCE_REVISION=${{ github.sha }}
           load: true
           tags: ${{ env.TEST_IMAGE }}
           cache-from: type=gha
@@ -499,15 +497,42 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Protect existing versioned image on release retries
+        id: image
+        if: needs.setup.outputs.publish_release == 'true'
+        env:
+          VERSION: ${{ needs.setup.outputs.version }}
+        run: |
+          if docker buildx imagetools inspect "$IMAGE_NAME:$VERSION" > image-inspect.txt 2> image-inspect-error.txt; then
+            CONFIGS=$(docker buildx imagetools inspect "$IMAGE_NAME:$VERSION" --format '{{json .Image}}')
+            AMD64=$(echo "$CONFIGS" | jq -r '."linux/amd64".config.Labels["org.opencontainers.image.revision"] // empty')
+            ARM64=$(echo "$CONFIGS" | jq -r '."linux/arm64".config.Labels["org.opencontainers.image.revision"] // empty')
+            if [ "$AMD64" != "$GITHUB_SHA" ] || [ "$ARM64" != "$GITHUB_SHA" ]; then
+              echo "::error::Docker tag already exists with a different or unknown source revision. Choose a new package version."
+              exit 1
+            fi
+            echo "reuse=true" >> "$GITHUB_OUTPUT"
+            echo "Reusing the existing versioned image for this commit." >> "$GITHUB_STEP_SUMMARY"
+          elif grep -qi 'manifest unknown\|not found' image-inspect-error.txt; then
+            echo "reuse=false" >> "$GITHUB_OUTPUT"
+          else
+            cat image-inspect-error.txt >&2
+            exit 1
+          fi
+
       - name: Push multi-arch image (amd64 + arm64)
+        if: steps.image.outputs.reuse != 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          build-args: |
+            PACKAGE_VERSION=${{ needs.setup.outputs.package_version }}
+            SOURCE_REVISION=${{ github.sha }}
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.version }}
             ${{ env.IMAGE_NAME }}:latest
+            ${{ needs.setup.outputs.publish_release == 'true' && format('{0}:{1}', env.IMAGE_NAME, needs.setup.outputs.version) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -516,7 +541,7 @@ jobs:
     name: 📝 [Release] Release Notes
     runs-on: ubuntu-latest
     needs: [setup, release-image]
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: needs.setup.outputs.publish_release == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -554,7 +579,7 @@ jobs:
             echo "No README changes"
           else
             git checkout -b "$RELEASE_BRANCH"
-            git commit -m "docs: update release notes for ${{ needs.setup.outputs.version }} [skip ci]"
+            git commit -m "docs: update release notes for ${{ needs.setup.outputs.version }}"
             git push --force-with-lease origin "$RELEASE_BRANCH"
           fi
 
@@ -568,7 +593,7 @@ jobs:
               if ! gh pr create --repo "$GITHUB_REPOSITORY" \
                 --base main --head "$RELEASE_BRANCH" \
                 --title "docs: update release notes for ${{ needs.setup.outputs.version }}" \
-                --body "Automated release-notes update. Merge after required checks pass."; then
+                --body "Automated update of the README latest-release block. GITHUB_TOKEN cannot trigger PR checks: close and reopen this PR with your own account to start CI, then merge after checks pass."; then
                 echo "::warning::README branch pushed, but the PR could not be opened. Enable 'Allow GitHub Actions to create and approve pull requests' in repository Actions settings, or open the PR manually."
                 echo "README update requires a PR: https://github.com/$GITHUB_REPOSITORY/compare/main...$RELEASE_BRANCH" >> "$GITHUB_STEP_SUMMARY"
               fi
@@ -582,7 +607,7 @@ jobs:
     name: 📦 [Release] GitHub Package
     runs-on: ubuntu-latest
     needs: [setup, release-notes]
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: needs.setup.outputs.publish_release == 'true'
     steps:
       - name: Download release report
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -634,4 +659,11 @@ jobs:
           echo "| 📦 GitHub Package | ${{ needs.release-package.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** \`${{ needs.setup.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** \`${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Creates a new release:** ${{ needs.setup.outputs.publish_release }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ needs.setup.outputs.publish_release }}" = "true" ]; then
+            echo "**Planned release image:** \`${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.version }}\` (see Push Image result above)." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "**Rolling image:** \`${{ env.IMAGE_NAME }}:latest\` (no new GitHub/PyPI release)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**CI image:** \`${{ env.TEST_IMAGE }}\` (no publication)." >> "$GITHUB_STEP_SUMMARY"
+          fi

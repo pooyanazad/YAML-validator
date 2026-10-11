@@ -6,27 +6,77 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to publish (e.g. v3.4.0-20261011)'
+        description: 'Release tag to publish (e.g. v3.5.0-20261011)'
         required: true
         type: string
 
 permissions:
   contents: read
-  id-token: write   # required for PyPI Trusted Publishing (OIDC)
 
 concurrency:
   group: yamlguard-pypi-release
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    name: Validate release and publication status
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.release.outputs.sha }}
+      published: ${{ steps.pypi.outputs.published }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate existing release and matching package version
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+        run: |
+          # Parse before using the supplied tag as a Git revision.
+          python3 -c 'import os; from scripts.release_notes import tag_key; tag_key(os.environ["RELEASE_TAG"])'
+          DRAFT=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')
+          if [ "$DRAFT" != "false" ]; then
+            echo "::error::Publish a GitHub release before publishing its package."
+            exit 1
+          fi
+          SHA=$(git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}")
+          PACKAGE_VERSION=$(python3 -c 'import os; from scripts.release_plan import validate_tag; print(validate_tag(os.environ["RELEASE_TAG"], "refs/tags/" + os.environ["RELEASE_TAG"]))')
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "package_version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check PyPI without hiding HTTP or network errors
+        id: pypi
+        env:
+          PACKAGE_VERSION: ${{ steps.release.outputs.package_version }}
+        run: |
+          python3 -m scripts.pypi_status --version "$PACKAGE_VERSION" --output "$GITHUB_OUTPUT"
+          echo "Package: yamlguard $PACKAGE_VERSION" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize publication plan
+        env:
+          PUBLISHED: ${{ steps.pypi.outputs.published }}
+        run: |
+          if [ "$PUBLISHED" = "true" ]; then
+            echo "Already present on PyPI; upload skipped and existing files left unchanged." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Not yet on PyPI; tests, build and publication follow. Check the Publish to PyPI job for the result." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   # ─── 1. Run full test suite before publishing ──────────────────────────────
   test:
     name: Test before release
+    needs: preflight
+    if: needs.preflight.outputs.published == 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
+          ref: ${{ needs.preflight.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -44,13 +94,13 @@ jobs:
   build:
     name: Build wheel & sdist
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [preflight, test]
     outputs:
       dist_path: dist/
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
+          ref: ${{ needs.preflight.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -94,6 +144,9 @@ jobs:
     name: Publish to PyPI
     runs-on: ubuntu-latest
     needs: [build]
+    permissions:
+      contents: read
+      id-token: write
     environment:
       name: pypi
       url: https://pypi.org/p/yamlguard
@@ -110,3 +163,7 @@ jobs:
           # Using PyPI Trusted Publisher — no PYPI_TOKEN needed!
           # Set up at: https://pypi.org/manage/account/publishing/
           print-hash: true
+
+      - name: Record successful publication
+        run: |
+          echo "PyPI publication completed: https://pypi.org/project/yamlguard/" >> "$GITHUB_STEP_SUMMARY"

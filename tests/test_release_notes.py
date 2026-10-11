@@ -155,3 +155,17 @@ def test_new_tests_are_not_presented_as_product_features():
 def test_invalid_release_tag_is_rejected(version):
     with pytest.raises(ValueError, match="Invalid release tag"):
         notes.tag_key(version)
+
+
+def test_version_highlights_fallback_and_dated_override(history):
+    root, head, _ = history
+    directory = root / "release-notes"
+    directory.mkdir()
+    marker = "<!-- previous-tag: v3.3.0-20260901 -->\n"
+    (directory / "v3.4.0.md").write_text(marker + "- Reviewed release summary.")
+    notes.generate(args(head, root / "body.md"))
+    assert "Reviewed release summary" in (root / "body.md").read_text()
+    (directory / "v3.4.0-20261011.md").write_text(marker + "- Date-specific override.")
+    notes.generate(args(head, root / "body.md"))
+    assert "Date-specific override" in (root / "body.md").read_text()
+    assert "Reviewed release summary" not in (root / "body.md").read_text()
