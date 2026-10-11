@@ -1,0 +1,40 @@
+name: Refresh Release Notes
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag whose description should be refreshed'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-release-notes-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Refresh existing GitHub release description
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Generate and update description
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          # Verify the release exists; this workflow must never create a release.
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"
+          python3 scripts/release_notes.py \
+            --version "$RELEASE_TAG" --head "refs/tags/$RELEASE_TAG" \
+            --repository "$GITHUB_REPOSITORY" --output release-body.md
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --notes-file release-body.md
+          cat release-body.md >> "$GITHUB_STEP_SUMMARY"
