@@ -52,7 +52,8 @@ RUN useradd --system --create-home --shell /bin/bash validator \
 
 # Use the venv Python and make the source packages importable from /data
 ENV PATH="/app/venv/bin:$PATH" \
-    PYTHONPATH="/app"
+    PYTHONPATH="/app" \
+    PYTHONSAFEPATH="1"
 
 # Switch to the non-root user
 USER validator

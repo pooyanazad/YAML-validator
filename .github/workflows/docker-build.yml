@@ -483,6 +483,14 @@ jobs:
             && echo "PASS: --version output is valid" \
             || { echo "FAIL: --version output unexpected"; exit 1; }
 
+      - name: "Mounted source must not override the image's CLI"
+        run: |
+          DATA_DIR=$(mktemp -d)
+          trap 'rm -rf "$DATA_DIR"' EXIT
+          chmod 755 "$DATA_DIR"
+          echo 'raise RuntimeError("Mounted yamlguard.py must not be imported")' > "$DATA_DIR/yamlguard.py"
+          docker run --rm -v "$DATA_DIR:/data:ro" "${{ env.TEST_IMAGE }}" --version
+
   # ── 4. [RELEASE] PUSH DOCKER IMAGE ───────────────────────────────────────────
   release-image:
     name: 🚀 [Release] Push Docker Image
