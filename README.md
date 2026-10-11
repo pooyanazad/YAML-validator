@@ -1,18 +1,48 @@
 # YAML Validator
 
 [![CI](https://github.com/pooyanazad/YAML-validator/actions/workflows/docker-build.yml/badge.svg)](https://github.com/pooyanazad/YAML-validator/actions/workflows/docker-build.yml)
+[![PyPI](https://img.shields.io/pypi/v/yamlguard.svg)](https://pypi.org/project/yamlguard/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Validate YAML files for syntax errors, style issues, and security misconfigurations — all in one command.
+Validate YAML files for syntax errors, style issues, and security misconfigurations — all in one command. Available as a Python CLI (`yamlguard`) via PyPI and as a Docker container (`pooyanazad/yaml-checker`).
 
 <img width="881" height="571" alt="YAML Validator output" src="https://github.com/user-attachments/assets/0a3278f9-9f86-431c-90f7-e3d122f0043b" />
 
-## Getting Started
+---
 
-**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) installed on your system.
+## Installation & Getting Started
 
-### One-time setup (Linux/macOS)
+### Option 1: Install from PyPI (Recommended)
 
-Run this once to create the `ytest` shortcut:
+Run directly on your host machine without needing Docker:
+
+```bash
+# Standard installation (syntax validation + yamllint)
+pip install yamlguard
+
+# Or install with Checkov security scanning support
+pip install "yamlguard[security]"
+
+# Or run instantly with pipx (isolated environment)
+pipx install yamlguard
+```
+
+Once installed, use `yamlguard` directly:
+
+```bash
+yamlguard myfile.yaml
+```
+
+---
+
+### Option 2: Run with Docker
+
+Zero-dependency execution using the official Docker container.
+
+#### One-time setup (Linux/macOS)
+
+Create the `ytest` shortcut:
 
 ```bash
 # Bash
@@ -29,25 +59,6 @@ echo 'alias ytest="docker run --rm -v \"\$(pwd):/data\" pooyanazad/yaml-checker"
 </details>
 
 Now you can use `ytest` anywhere.
-
-## Usage
-
-> [!NOTE]
-> The multiple files and directory scanning features will be available in **v3**, starting on June 1st.
-
-```bash
-# Single file
-ytest myfile.yaml
-
-# Multiple files
-ytest config.yaml deployment.yaml secrets.yaml
-
-# Entire directory (recursive)
-ytest ./configs/
-
-# Glob pattern
-ytest ./configs/**/*.yaml
-```
 
 <details>
 <summary>Windows / without the alias</summary>
@@ -69,6 +80,46 @@ docker run --rm -v "$(pwd):/data" pooyanazad/yaml-checker myfile.yaml
 
 </details>
 
+---
+
+## Usage
+
+You can run `yamlguard` (if installed via pip) or `ytest` (if using Docker):
+
+```bash
+# Single file
+yamlguard myfile.yaml
+
+# Multiple files
+yamlguard config.yaml deployment.yaml secrets.yaml
+
+# Entire directory (recursive)
+yamlguard ./configs/
+
+# Glob pattern
+yamlguard ./configs/**/*.yaml
+```
+
+### Output Formats
+
+Export results to CI/CD tools and code scanners with `--format` (`-f`):
+
+```bash
+# Coloured human-readable summary (default)
+yamlguard myfile.yaml --format text
+
+# Machine-readable JSON
+yamlguard myfile.yaml --format json
+
+# JUnit XML (compatible with Jenkins, GitLab, Azure DevOps)
+yamlguard myfile.yaml --format junit > test-results.xml
+
+# SARIF v2.1.0 (for GitHub Code Scanning)
+yamlguard myfile.yaml --format sarif > results.sarif
+```
+
+---
+
 ## What It Checks
 
 | Layer | Tool | What it catches |
@@ -79,14 +130,19 @@ docker run --rm -v "$(pwd):/data" pooyanazad/yaml-checker myfile.yaml
 
 Issues are grouped by severity (**Critical → High → Medium → Low**) with colored output and a summary table. When scanning multiple files, you get a combined report showing which files have problems.
 
+---
+
 ## Features
 
+✅ Native Python CLI (`yamlguard`) & Multi-arch Docker image  
 ✅ Multi-file & directory scanning  
 ✅ Glob pattern support (`**/*.yaml`)  
+✅ Multiple output formats: Text, JSON, JUnit XML, SARIF v2.1.0  
 ✅ Cross-platform (Windows, Linux, macOS)  
-✅ Multi-arch Docker image (amd64/arm64)  
 ✅ Colored severity-based reporting  
 ✅ Zero configuration required  
+
+---
 
 ## Docker Image
 
@@ -97,25 +153,19 @@ Issues are grouped by severity (**Critical → High → Medium → Low**) with c
 | **Base** | `python:3.12-slim` |
 | **Platforms** | `linux/amd64`, `linux/arm64` |
 
+---
+
 ## Release Notes
 
 <!-- RELEASE_NOTES_START -->
-### v3.3.0-20260901 — 2026-09-01
+### v3.4.0-20261011 — 2026-10-11
 
 **Changes since last release:**
-* test: make sure the tool doesn't choke on a 40k-line YAML file (#34) (bfba1b4)
-* test: catch resolve_files edge cases — symlinks, bad dirs, wrong extensions (#33) (e87687e)
-* test: #32 add TestMultiFileSummary — multi-file combined summary tests (fc9315c)
-* test: #31 add TestHelpVersionFlags — --help and --version verification (172cebd)
-* test: #30 add TestMainExitCode1 — verify exit code 1 for issues files (2444f19)
-* test: #29 add TestMainEndToEnd — e2e subprocess exit code 0 (4d88ced)
-* CI tests run parallel (a4ab8c8)
-* fix: #8 suppress redundant large-file warning (c074eb9)
-* test: #28 add TestCheckDependenciesMocked — mock yamllint/checkov availability (38fefb2)
-* fix: #8 handle large YAML files (2e0f5ff)
-* test: #27 add TestPrintSummaryTable — verify table rendering and counts (5dd7e6b)
-* test: add TestPrintIssues -- severity grouping order tests for print_issues() (#26) (e65a293)
-* test: add TestPrintColored — capsys output tests for print_colored() (#25) (fa41dca)
+* feat: official PyPI package release as `yamlguard` (`pip install yamlguard`)
+* feat: support `--format` outputs (`text`, `json`, `junit`, `sarif`)
+* feat: modular Python library structure under `yaml_validator`
+* ci: automated PyPI trusted publishing workflow on GitHub Release
+* test: comprehensive test suite with 230 passing tests and high coverage
 
-**Docker Image:** `pooyanazad/yaml-checker:v3.3.0-20260901`
+**Docker Image:** `pooyanazad/yaml-checker:v3.4.0-20261011`
 <!-- RELEASE_NOTES_END -->
