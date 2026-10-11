@@ -117,19 +117,16 @@ Syntax errors are Critical. Lint errors are Medium and warnings are Low, so **li
 ## Latest release
 
 <!-- RELEASE_NOTES_START -->
-### v3.5.0-20261011 — 2026-10-11
+### v3.5.1-20261011 — 2026-10-11
 
-**Changes since `v3.4.0-20261011`** (3 non-merge commits).
+**Changes since `v3.5.0-20261011`** (7 non-merge commits).
 
-- Rewrote the README around the actual CLI behavior, optional Checkov installation, report formats, exit codes, and working Docker commands.
-- Replaced repeated release features with highlights for the validated previous-tag-to-current-commit range, with full commit details collapsed on GitHub.
-- Kept JSON, SARIF, and JUnit output clean by sending path and dependency diagnostics to stderr and suppressing text warnings in report mode.
-- Unified package and Docker/GitHub versions at 3.5.0. New release tags come from the package version; monthly rebuilds no longer invent new package releases.
-- Added publication checks for matching tag/package versions, existing PyPI versions, and existing Docker tags; fixed PyPI dispatch and regenerated the packaged README before building.
-- Added a manual tool to repair an existing GitHub release description, plus regression tests for release planning and machine-readable CLI output.
+- Build and maintenance: 2 commit(s).
+- Fixes: 3 commit(s).
+- Documentation: 2 commit(s).
 
-[Full changelog](https://github.com/pooyanazad/YAML-validator/compare/v3.4.0-20261011...v3.5.0-20261011)
+[Full changelog](https://github.com/pooyanazad/yamlguard/compare/v3.5.0-20261011...v3.5.1-20261011)
 
-**Docker image:** `pooyanazad/yaml-checker:v3.5.0-20261011`
+**Docker image:** `pooyanazad/yamlguard:v3.5.1-20261011`
 
 <!-- RELEASE_NOTES_END -->
