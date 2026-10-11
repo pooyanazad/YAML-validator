@@ -50,8 +50,9 @@ RUN chmod +x entrypoint.sh
 RUN useradd --system --create-home --shell /bin/bash validator \
     && chown -R validator:validator /app /data
 
-# Use the venv Python for all subsequent commands
-ENV PATH="/app/venv/bin:$PATH"
+# Use the venv Python and make the source packages importable from /data
+ENV PATH="/app/venv/bin:$PATH" \
+    PYTHONPATH="/app"
 
 # Switch to the non-root user
 USER validator
