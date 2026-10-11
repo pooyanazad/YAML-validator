@@ -11,4 +11,4 @@ Package layout
   cli.py        — argparse entry-point (main, resolve_files)
 """
 
-__version__ = "2.1.0"
+__version__ = "3.4.0"
