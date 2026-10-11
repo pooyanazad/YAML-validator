@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: '00 00 1 * *'
   workflow_dispatch:
+    inputs:
+      manual_tag:
+        description: 'Manual version tag (e.g. v3.4.0-20261011). Leave empty to auto-calculate next version.'
+        required: false
+        default: ''
+        type: string
   push:
     branches: [ main ]
   pull_request:
@@ -12,6 +18,7 @@ on:
 permissions:
   contents: write
   packages: write
+  actions: write
 
 env:
   REGISTRY: docker.io
@@ -49,17 +56,22 @@ jobs:
 
           LATEST_TAG=$(git tag -l "v${MAJOR}.*.${PATCH}-*" | sort -V | tail -n 1)
 
-          if [ -z "$LATEST_TAG" ]; then
-            MINOR_VERSION=0
+          if [ -n "${{ inputs.manual_tag }}" ]; then
+            VERSION="${{ inputs.manual_tag }}"
+            echo "Using manual version tag: ${VERSION}"
           else
-            MINOR_VERSION=$(echo "$LATEST_TAG" | sed "s/v${MAJOR}\.\([0-9]*\)\.${PATCH}-.*/\1/")
-            MINOR_VERSION=$((MINOR_VERSION + 1))
-            while git tag -l "v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}" | grep -q "v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}"; do
+            if [ -z "$LATEST_TAG" ]; then
+              MINOR_VERSION=0
+            else
+              MINOR_VERSION=$(echo "$LATEST_TAG" | sed "s/v${MAJOR}\.\([0-9]*\)\.${PATCH}-.*/\1/")
               MINOR_VERSION=$((MINOR_VERSION + 1))
-            done
+              while git tag -l "v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}" | grep -q "v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}"; do
+                MINOR_VERSION=$((MINOR_VERSION + 1))
+              done
+            fi
+            VERSION="v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}"
           fi
 
-          VERSION="v${MAJOR}.${MINOR_VERSION}.${PATCH}-${DATE}"
           echo "version=${VERSION}"       >> $GITHUB_OUTPUT
           echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
           echo "✅ Next version: ${VERSION}"
@@ -638,6 +650,13 @@ jobs:
           draft: false
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trigger PyPI release workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Triggering release.yml for version ${{ needs.setup.outputs.version }}..."
+          gh workflow run release.yml -f tag="${{ needs.setup.outputs.version }}" || echo "Workflow dispatch triggered or skipped"
 
   # ── 7. SUMMARY ───────────────────────────────────────────────────────────────
   summary:
