@@ -138,18 +138,19 @@ See [all releases](https://github.com/pooyanazad/YAML-validator/releases), [repo
 ## Latest release
 
 <!-- RELEASE_NOTES_START -->
-### v3.4.0-20261011 — 2026-10-11
+### v3.5.0-20261011 — 2026-10-11
 
-**Changes since `v3.3.0-20260901`** (63 non-merge commits).
+**Changes since `v3.4.0-20261011`** (3 non-merge commits).
 
-- Add PyPI packaging for the `yamlguard` Python CLI. Syntax validation and yamllint are included; Checkov is available through the optional `security` extra.
-- Export validation results as JSON, SARIF 2.1.0, or JUnit XML, alongside the existing text report.
-- Handle Checkov reports containing multiple frameworks and malformed output more gracefully.
-- Docker now uses a multi-stage build, runs as a non-root user, and includes a health check. CI adds lint/type checks, a coverage gate, image-size checks, and vulnerability reports.
-- Update runtime dependencies, development tools, and GitHub Actions; add package build and trusted-publishing workflows.
+- Rewrote the README around the actual CLI behavior, optional Checkov installation, report formats, exit codes, and working Docker commands.
+- Replaced repeated release features with highlights for the validated previous-tag-to-current-commit range, with full commit details collapsed on GitHub.
+- Kept JSON, SARIF, and JUnit output clean by sending path and dependency diagnostics to stderr and suppressing text warnings in report mode.
+- Unified package and Docker/GitHub versions at 3.5.0. New release tags come from the package version; monthly rebuilds no longer invent new package releases.
+- Added publication checks for matching tag/package versions, existing PyPI versions, and existing Docker tags; fixed PyPI dispatch and regenerated the packaged README before building.
+- Added a manual tool to repair an existing GitHub release description, plus regression tests for release planning and machine-readable CLI output.
 
-[Full changelog](https://github.com/pooyanazad/YAML-validator/compare/v3.3.0-20260901...v3.4.0-20261011)
+[Full changelog](https://github.com/pooyanazad/YAML-validator/compare/v3.4.0-20261011...v3.5.0-20261011)
 
-**Docker image:** `pooyanazad/yaml-checker:v3.4.0-20261011`
+**Docker image:** `pooyanazad/yaml-checker:v3.5.0-20261011`
 
 <!-- RELEASE_NOTES_END -->
