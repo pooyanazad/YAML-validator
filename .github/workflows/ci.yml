@@ -23,13 +23,10 @@ jobs:
           python-version: "3.12"
 
       - name: Install dev dependencies
-        run: pip install ruff mypy black
+        run: pip install ruff mypy
 
-      - name: Run ruff (linter)
+      - name: Run ruff (linter + format check)
         run: ruff check yaml_validator/ tests/
-
-      - name: Run black (formatter check)
-        run: black --check yaml_validator/ tests/
 
   test:
     name: Test (Python ${{ matrix.python-version }})
@@ -50,7 +47,7 @@ jobs:
 
       - name: Install package + test deps
         run: |
-          pip install -e ".[dev]"
+          pip install -e . -r requirements-test.txt
 
       - name: Run tests with coverage
         run: pytest tests/ --cov=yaml_validator --cov-report=term-missing -v

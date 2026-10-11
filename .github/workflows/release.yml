@@ -30,7 +30,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install package + test deps
-        run: pip install -e ".[dev]"
+        run: pip install -e . -r requirements-test.txt
 
       - name: Run tests
         run: pytest tests/ -v

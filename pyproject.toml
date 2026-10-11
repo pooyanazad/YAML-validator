@@ -55,6 +55,8 @@ dev = [
     "pre-commit",
     "pytest",
     "pytest-cov",
+    "pytest-json-report",
+    "jsonschema",
 ]
 
 [project.urls]
