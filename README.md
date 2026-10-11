@@ -1,171 +1,153 @@
-# YAML Validator
+# YAML Validator · yamlguard
 
 [![CI](https://github.com/pooyanazad/YAML-validator/actions/workflows/docker-build.yml/badge.svg)](https://github.com/pooyanazad/YAML-validator/actions/workflows/docker-build.yml)
 [![PyPI](https://img.shields.io/pypi/v/yamlguard.svg)](https://pypi.org/project/yamlguard/)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Validate YAML files for syntax errors, style issues, and security misconfigurations — all in one command. Available as a Python CLI (`yamlguard`) via PyPI and as a Docker container (`pooyanazad/yaml-checker`).
+Check YAML syntax, catch style problems, and scan supported infrastructure configurations with one command. Install the **`yamlguard`** Python CLI, or run **`pooyanazad/yaml-checker`** with Docker.
 
-<img width="881" height="571" alt="YAML Validator output" src="https://github.com/user-attachments/assets/0a3278f9-9f86-431c-90f7-e3d122f0043b" />
+## Get started
 
----
+### Python CLI
 
-## Installation & Getting Started
-
-### Option 1: Install from PyPI (Recommended)
-
-Run directly on your host machine without needing Docker:
+Use an isolated environment such as pipx:
 
 ```bash
-# Standard installation (syntax validation + yamllint)
-pip install yamlguard
-
-# Or install with Checkov security scanning support
-pip install "yamlguard[security]"
-
-# Or run instantly with pipx (isolated environment)
 pipx install yamlguard
-```
-
-Once installed, use `yamlguard` directly:
-
-```bash
 yamlguard myfile.yaml
 ```
 
----
-
-### Option 2: Run with Docker
-
-Zero-dependency execution using the official Docker container.
-
-#### One-time setup (Linux/macOS)
-
-Create the `ytest` shortcut:
+Or install into your Python environment:
 
 ```bash
-# Bash
-echo 'alias ytest="docker run --rm -v \"\$(pwd):/data\" pooyanazad/yaml-checker"' >> ~/.bashrc && source ~/.bashrc
-```
-
-<details>
-<summary>Using Zsh instead?</summary>
-
-```bash
-echo 'alias ytest="docker run --rm -v \"\$(pwd):/data\" pooyanazad/yaml-checker"' >> ~/.zshrc && source ~/.zshrc
-```
-
-</details>
-
-Now you can use `ytest` anywhere.
-
-<details>
-<summary>Windows / without the alias</summary>
-
-**PowerShell / CMD:**
-```bash
-docker run --rm -v "%cd%:/data" pooyanazad/yaml-checker myfile.yaml
-```
-
-**Git Bash:**
-```bash
-MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd):/data" pooyanazad/yaml-checker myfile.yaml
-```
-
-**Linux/macOS (no alias):**
-```bash
-docker run --rm -v "$(pwd):/data" pooyanazad/yaml-checker myfile.yaml
-```
-
-</details>
-
----
-
-## Usage
-
-You can run `yamlguard` (if installed via pip) or `ytest` (if using Docker):
-
-```bash
-# Single file
+python -m pip install yamlguard
 yamlguard myfile.yaml
-
-# Multiple files
-yamlguard config.yaml deployment.yaml secrets.yaml
-
-# Entire directory (recursive)
-yamlguard ./configs/
-
-# Glob pattern
-yamlguard ./configs/**/*.yaml
 ```
 
-### Output Formats
-
-Export results to CI/CD tools and code scanners with `--format` (`-f`):
+If your package index reports that `yamlguard` is unavailable, install the tagged source instead (requires Git):
 
 ```bash
-# Coloured human-readable summary (default)
-yamlguard myfile.yaml --format text
-
-# Machine-readable JSON
-yamlguard myfile.yaml --format json
-
-# JUnit XML (compatible with Jenkins, GitLab, Azure DevOps)
-yamlguard myfile.yaml --format junit > test-results.xml
-
-# SARIF v2.1.0 (for GitHub Code Scanning)
-yamlguard myfile.yaml --format sarif > results.sarif
+python -m pip install 'git+https://github.com/pooyanazad/YAML-validator.git@v3.4.0-20261011'
 ```
 
----
+The base package includes **PyYAML and yamllint**. To add **Checkov security checks**, install the optional extra in the same environment:
 
-## What It Checks
+```bash
+python -m pip install 'yamlguard[security]'
+# With pipx, use: pipx install 'yamlguard[security]'
+```
 
-| Layer | Tool | What it catches |
+If Checkov is unavailable, validation continues with syntax and lint checks and reports that security scanning was skipped. Python 3.12 is used in CI and Docker; the package declares Python 3.9 or newer, subject to dependency compatibility.
+
+### Docker
+
+Docker includes all three tools, including Checkov. Mount the directory containing your YAML files; paths inside the container are relative to `/data`.
+
+**Linux/macOS:**
+
+```bash
+docker run --rm -v "$(pwd):/data:ro" pooyanazad/yaml-checker:latest myfile.yaml
+```
+
+**Windows PowerShell:**
+
+```powershell
+docker run --rm -v "${PWD}:/data:ro" pooyanazad/yaml-checker:latest myfile.yaml
+```
+
+**Windows Command Prompt:**
+
+```bat
+docker run --rm -v "%cd%:/data:ro" pooyanazad/yaml-checker:latest myfile.yaml
+```
+
+For repeatable runs, replace `latest` with a release tag such as `v3.4.0-20261011`. Images are built for `linux/amd64` and `linux/arm64`, use Python 3.12, and run as a non-root user. Mounted files must be readable by that user.
+
+Optional Bash/Zsh shortcut: add this function to `~/.bashrc` or `~/.zshrc`, then reload your shell. It mounts your current directory each time you run it.
+
+```bash
+ytest() {
+  docker run --rm -v "$(pwd):/data:ro" pooyanazad/yaml-checker:latest "$@"
+}
+
+ytest myfile.yaml
+```
+
+## Scan files and directories
+
+```bash
+yamlguard config.yaml                         # One file
+yamlguard config.yaml deployment.yml          # Multiple files
+yamlguard ./configs/                          # Recursively scan .yaml and .yml files
+yamlguard './configs/**/*.yaml'               # Quote globs so yamlguard expands them
+yamlguard ./configs/ --no-security             # Skip Checkov scanning
+yamlguard deployment.yaml --timeout 60        # Limit each validator subprocess to 60 seconds
+```
+
+The same arguments work with Docker or `ytest`. Repeated paths are scanned once. Missing paths produce a warning and are skipped; the command fails if no files remain. The default subprocess timeout is 300 seconds; dependency probes have a separate 30-second timeout.
+
+Run `yamlguard --help` for all options or `yamlguard --version` to check the installed version. From a source checkout, `python -m yaml_validator` provides the same CLI.
+
+## What gets checked
+
+| Check | Tool | Behavior |
 |---|---|---|
-| **Syntax** | PyYAML | Parse errors, broken structure, invalid indentation |
-| **Linting** | yamllint | Style issues, line length, trailing spaces, consistency |
-| **Security** | Checkov | Hardcoded secrets, privileged containers, misconfigurations |
+| Syntax | PyYAML | Parses YAML, including multiple documents; reports parse and file-read errors. |
+| Style | yamllint | Reports indentation, line length, trailing spaces, duplicate keys, and other lint rules. |
+| Security | Checkov, when installed | Runs Checkov's checks for supported infrastructure formats, such as Kubernetes manifests. Findings depend on the file and Checkov version. |
 
-Issues are grouped by severity (**Critical → High → Medium → Low**) with colored output and a summary table. When scanning multiple files, you get a combined report showing which files have problems.
+Text reports group findings by **Critical, High, Medium, Low, and Info**. Scanning several files also produces a combined summary. Checkov is not a universal security check for arbitrary application YAML; a clean report covers only the checks that ran.
 
----
+### Exit codes
 
-## Features
-
-✅ Native Python CLI (`yamlguard`) & Multi-arch Docker image  
-✅ Multi-file & directory scanning  
-✅ Glob pattern support (`**/*.yaml`)  
-✅ Multiple output formats: Text, JSON, JUnit XML, SARIF v2.1.0  
-✅ Cross-platform (Windows, Linux, macOS)  
-✅ Colored severity-based reporting  
-✅ Zero configuration required  
-
----
-
-## Docker Image
-
-| | |
+| Code | Meaning |
 |---|---|
-| **Image** | `pooyanazad/yaml-checker` |
-| **Tag** | `latest` is always up to date |
-| **Base** | `python:3.12-slim` |
-| **Platforms** | `linux/amd64`, `linux/arm64` |
+| `0` | No findings, or only Medium/Low/Info findings. |
+| `1` | Critical/High findings, no matching files, or a required dependency is unavailable. |
+| `2` | Invalid CLI arguments (argparse). |
 
----
+**Lint findings alone usually do not fail the command:** yamllint errors map to Medium and warnings to Low. Syntax errors are Critical. Checkov findings without an explicit severity default to High.
 
-## Release Notes
+## Export reports for CI
+
+Choose `--format` (or `-f`):
+
+```bash
+yamlguard ./configs/ --format text             # Human-readable report (default)
+yamlguard ./configs/ --format json > results.json
+yamlguard ./configs/ --format junit > test-results.xml
+yamlguard ./configs/ --format sarif > results.sarif
+```
+
+- **JSON:** one object for a single file, an array for multiple files. Each result includes the path, syntax status, severity counts, and findings.
+- **JUnit XML:** Critical/High findings become failures; less severe findings appear as skipped test cases.
+- **SARIF 2.1.0:** a report you can upload to a compatible code-scanning service, including GitHub Code Scanning. Generating the file does not upload it automatically.
+
+Reports go to stdout. In the updated source, diagnostics for machine-readable formats go to stderr; the CLI at the `v3.4.0-20261011` source tag can put missing-tool or path warnings on stdout, so check that version's redirected report before consuming it. Preserve the exit code when your CI collects a report after validation fails.
+
+## Releases and contributing
+
+GitHub/Docker tags use `vX.Y.Z-YYYYMMDD`; PyPI uses the package version (for example, `3.4.0`). The Docker release counter and Python package version are currently separate, so use the version shown in the release's installation instructions.
+
+The pipeline runs checks on pushes and pull requests. Docker/GitHub releases run on the monthly schedule or manual dispatch. PyPI publishing runs in a separate workflow; a dispatch does not confirm that publishing succeeded.
+
+See [all releases](https://github.com/pooyanazad/YAML-validator/releases), [report an issue](https://github.com/pooyanazad/YAML-validator/issues), or read the [contributing guide](CONTRIBUTING.md).
+
+## Latest release
 
 <!-- RELEASE_NOTES_START -->
 ### v3.4.0-20261011 — 2026-10-11
 
-**Changes since last release:**
-* feat: official PyPI package release as `yamlguard` (`pip install yamlguard`)
-* feat: support `--format` outputs (`text`, `json`, `junit`, `sarif`)
-* feat: modular Python library structure under `yaml_validator`
-* ci: automated PyPI trusted publishing workflow on GitHub Release
-* test: comprehensive test suite with 230 passing tests and high coverage
+**Changes since `v3.3.0-20260901`** (63 non-merge commits).
 
-**Docker Image:** `pooyanazad/yaml-checker:v3.4.0-20261011`
+- Add PyPI packaging for the `yamlguard` Python CLI. Syntax validation and yamllint are included; Checkov is available through the optional `security` extra.
+- Export validation results as JSON, SARIF 2.1.0, or JUnit XML, alongside the existing text report.
+- Handle Checkov reports containing multiple frameworks and malformed output more gracefully.
+- Docker now uses a multi-stage build, runs as a non-root user, and includes a health check. CI adds lint/type checks, a coverage gate, image-size checks, and vulnerability reports.
+- Update runtime dependencies, development tools, and GitHub Actions; add package build and trusted-publishing workflows.
+
+[Full changelog](https://github.com/pooyanazad/YAML-validator/compare/v3.3.0-20260901...v3.4.0-20261011)
+
+**Docker image:** `pooyanazad/yaml-checker:v3.4.0-20261011`
+
 <!-- RELEASE_NOTES_END -->

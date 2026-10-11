@@ -78,6 +78,8 @@ packages = ["yaml_validator"]
 include = [
     "/yaml_validator",
     "/tests",
+    "/scripts",
+    "/release-notes",
     "/README.md",
     "/LICENSE",
     "/pyproject.toml",

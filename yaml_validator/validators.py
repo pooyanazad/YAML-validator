@@ -375,7 +375,7 @@ def validate_yaml_file(
 
     _say(f"\n🔍 Validating: {file_path}", Severity.INFO, bold=True)
     _say("=" * 60, Severity.INFO)
-    if not no_security:
+    if not no_security and not quiet:
         warn_if_large_file(file_path)
 
     all_issues: list[ValidationIssue] = []

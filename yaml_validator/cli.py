@@ -11,6 +11,7 @@ Argparse entry-point, file resolution, and dependency checking.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import glob
 import subprocess
 import sys
@@ -172,17 +173,22 @@ def main() -> None:  # noqa: PLR0912, PLR0915
 
     args = parser.parse_args()
 
-    yaml_files = resolve_files(args.files)
+    # Diagnostics must not corrupt JSON, XML, or SARIF redirected from stdout.
+    diagnostic_output = sys.stdout if args.format == "text" else sys.stderr
+    with contextlib.redirect_stdout(diagnostic_output):
+        yaml_files = resolve_files(args.files)
 
     if not yaml_files:
-        print_colored(
-            "Error: No YAML files found for the given paths",
-            Severity.CRITICAL,
-            bold=True,
-        )
+        with contextlib.redirect_stdout(diagnostic_output):
+            print_colored(
+                "Error: No YAML files found for the given paths",
+                Severity.CRITICAL,
+                bold=True,
+            )
         sys.exit(1)
 
-    tools = check_dependencies()
+    with contextlib.redirect_stdout(diagnostic_output):
+        tools = check_dependencies()
 
     # Any non-text format is machine-readable: keep stdout free of decoration.
     json_mode = args.format != "text"
