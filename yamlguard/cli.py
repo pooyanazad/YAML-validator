@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import glob
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -88,24 +89,90 @@ def check_dependencies() -> ToolAvailability:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+def _contains_symlink(path: Path) -> bool:
+    """Check every path component, including links to missing targets."""
+    current = Path(path.anchor) if path.is_absolute() else Path(".")
+    parts = path.parts[1:] if path.is_absolute() else path.parts
+    for part in parts:
+        current /= part
+        if current.is_symlink():
+            return True
+    return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+def _expand_paths(path_arg: str) -> tuple[list[Path], bool]:
+    """Expand a path or glob without descending through symbolic links."""
+    directory_only = path_arg.endswith(os.sep) or bool(os.altsep and path_arg.endswith(os.altsep))
+    path = Path(path_arg)
+    skipped_symlink = False
+    if path.is_absolute():
+        matches = [Path(path.anchor)]
+        parts = path.parts[1:]
+    else:
+        matches = [Path(".")]
+        parts = path.parts
+
+    for part in parts:
+        expanded: list[Path] = []
+        for parent in matches:
+            if part == "**":
+                # Recursive glob expansion must prune links before entering them.
+                for root, dirs, _ in os.walk(parent, followlinks=False):
+                    dirs[:] = [
+                        name
+                        for name in dirs
+                        if not name.startswith(".") and not (Path(root) / name).is_symlink()
+                    ]
+                    expanded.append(Path(root))
+            else:
+                # A matched parent is a literal path, even if its name contains
+                # glob metacharacters (e.g. "a[1]"). Reinterpreting it here can
+                # reopen a symlink that was filtered out in an earlier segment.
+                for match in glob.iglob(str(Path(glob.escape(str(parent))) / part)):
+                    candidate = Path(match)
+                    if candidate.is_symlink():
+                        skipped_symlink = True
+                    else:
+                        expanded.append(candidate)
+        matches = expanded
+
+    # Path strips trailing separators, but glob patterns ending in one match
+    # directories only (e.g. "configs/*/").
+    matches = [match for match in matches if not directory_only or match.is_dir()]
+
+    # Keep the old literal-path fallback for names such as "odd[1]" while
+    # rejecting links in every component, not just at the final file.
+    if not matches and _contains_symlink(path):
+        skipped_symlink = True
+    elif not matches and path.exists() and (not directory_only or path.is_dir()):
+        matches = [path]
+
+    return matches, skipped_symlink
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 def resolve_files(paths: list[str]) -> list[str]:
-    """Resolve file paths, directories, and glob patterns to a list of YAML files."""
+    """Resolve paths and globs to YAML files, skipping file and directory links."""
     yaml_extensions = {".yaml", ".yml"}
     resolved: list[str] = []
-    seen: set = set()
+    seen: set[str] = set()
 
     for path_arg in paths:
-        expanded = glob.glob(path_arg, recursive=True)
-
-        if not expanded:
-            expanded = [path_arg]
+        expanded, skipped_symlink = _expand_paths(path_arg)
+        if not expanded and not skipped_symlink:
+            print_colored(f"Warning: '{path_arg}' not found, skipping", Severity.MEDIUM)
 
         for item in expanded:
-            p = Path(item).resolve()
+            p = item.resolve()
 
             if p.is_dir():
-                for ext in yaml_extensions:
-                    for yaml_file in sorted(p.rglob(f"*{ext}")):
+                for root, dirs, files in os.walk(p, followlinks=False):
+                    dirs[:] = [name for name in dirs if not (Path(root) / name).is_symlink()]
+                    for name in sorted(files):
+                        yaml_file = Path(root) / name
+                        if yaml_file.suffix not in yaml_extensions or yaml_file.is_symlink():
+                            continue
                         real = str(yaml_file.resolve())
                         if real not in seen:
                             seen.add(real)

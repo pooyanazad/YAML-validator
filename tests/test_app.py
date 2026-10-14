@@ -1497,50 +1497,130 @@ class TestResolveFilesNegative:
     # ── Symlink handling ──────────────────────────────────────────────────────
 
     def test_broken_symlink_does_not_crash(self, tmp_path):
-        """A broken symlink in a directory must not cause resolve_files to raise.
+        """Broken links are omitted whether passed directly or found in a directory."""
+        link = tmp_path / "ghost.yaml"
+        link.symlink_to(tmp_path / "missing.yaml")
 
-        Note: rglob finds symlinks by name even when their target is missing.
-        The important guarantee is that the function completes without an
-        exception — validation functions will handle the missing target later.
-        """
-        target = tmp_path / "ghost.yaml"
-        link = tmp_path / "link_to_ghost.yaml"
-        link.symlink_to(target)  # target never created → broken
-        try:
-            result = resolve_files([str(tmp_path)])
-        except Exception as exc:
-            pytest.fail(f"resolve_files raised on a broken symlink: {exc}")
-        assert isinstance(result, list)
+        assert resolve_files([str(link)]) == []
+        assert resolve_files([str(tmp_path)]) == []
 
-    def test_symlink_to_valid_file_included(self, tmp_path):
-        """A symlink pointing to a real .yaml file IS returned by resolve_files.
-
-        Note: resolve_files returns the symlink's own name, not the target's.
-        Both the real file and the symlink have .yaml extensions here.
-        """
+    def test_symlink_to_valid_file_is_skipped(self, tmp_path):
+        """A real YAML file is found while a link to it is omitted."""
         real = tmp_path / "real.yaml"
         real.write_text("key: value\n")
         link = tmp_path / "link.yaml"
         link.symlink_to(real)
-        result = resolve_files([str(tmp_path)])
-        names = [Path(f).name for f in result]
-        # Both the real file AND the symlink should appear (or at least one of them)
-        assert "real.yaml" in names or "link.yaml" in names, (
-            f"Expected at least one of real.yaml/link.yaml, got: {names}"
-        )
+
+        assert resolve_files([str(link)]) == []
+        assert resolve_files([str(tmp_path)]) == [str(real)]
+        assert resolve_files([str(tmp_path / "*.yaml")]) == [str(real)]
+
+    def test_symlinked_directory_is_skipped(self, tmp_path, capsys):
+        """Do not scan a directory link, even when it contains YAML files."""
+        target = tmp_path / "target"
+        target.mkdir()
+        (target / "inside.yaml").write_text("key: value\n")
+        scan = tmp_path / "scan"
+        scan.mkdir()
+        link = scan / "linked"
+        link.symlink_to(target, target_is_directory=True)
+
+        assert resolve_files([str(link)]) == []
+        assert resolve_files([str(scan)]) == []
+        assert resolve_files([str(scan / "*" / "*.yaml")]) == []
+        assert resolve_files([str(link / "inside.yaml")]) == []
+        assert capsys.readouterr().out == ""
+
+    def test_glob_matching_only_symlinks_is_skipped(self, tmp_path, capsys):
+        """A glob that finds only links should not claim its path is missing."""
+        target = tmp_path / "target.yaml"
+        target.write_text("ok: true\n")
+        scan = tmp_path / "scan"
+        scan.mkdir()
+        (scan / "linked.yaml").symlink_to(target)
+
+        assert resolve_files([str(scan / "*.yaml")]) == []
+        assert capsys.readouterr().out == ""
+
+    def test_trailing_slash_glob_matches_only_directories(self, tmp_path):
+        """A directory-only glob must not pass regular files to validation."""
+        configs = tmp_path / "configs"
+        configs.mkdir()
+        valid_dir = configs / "valid"
+        valid_dir.mkdir()
+        valid = valid_dir / "config.yaml"
+        valid.write_text("ok: true\n")
+        notes = configs / "notes.txt"
+        notes.write_text("not YAML: [\n")
+        (configs / "linked").symlink_to(valid_dir, target_is_directory=True)
+
+        assert resolve_files([str(configs / "*") + os.sep]) == [str(valid)]
+        assert resolve_files([str(notes) + os.sep]) == []
+
+    def test_recursive_glob_skips_symlinked_directory(self, tmp_path):
+        """A recursive glob must not enter a linked directory outside its root."""
+        scan = tmp_path / "scan"
+        scan.mkdir()
+        real = scan / "real.yaml"
+        real.write_text("key: value\n")
+        target = tmp_path / "target"
+        target.mkdir()
+        (target / "outside.yaml").write_text("key: value\n")
+        (scan / "linked").symlink_to(target, target_is_directory=True)
+
+        assert resolve_files([str(scan / "**" / "*.yaml")]) == [str(real)]
+
+    def test_glob_does_not_reinterpret_matched_directory_name(self, tmp_path):
+        """A matched literal name containing glob syntax must not reopen a symlink."""
+        scan = tmp_path / "scan"
+        scan.mkdir()
+        literal = scan / "a[1]"
+        literal.mkdir()
+        real = literal / "real.yaml"
+        real.write_text("ok: true\n")
+
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "leaked.yaml").write_text("ok: true\n")
+        (scan / "a1").symlink_to(outside, target_is_directory=True)
+
+        assert resolve_files([str(scan / "*" / "*.yaml")]) == [str(real)]
+
+    def test_explicit_path_with_glob_characters_is_still_accepted(self, tmp_path, capsys):
+        """Literal fallback accepts real paths but still rejects symlink ancestors."""
+        literal = tmp_path / "odd[1]"
+        literal.mkdir()
+        real = literal / "real.yaml"
+        real.write_text("ok: true\n")
+        link = tmp_path / "linked[1]"
+        link.symlink_to(literal, target_is_directory=True)
+
+        assert resolve_files([str(real)]) == [str(real)]
+        assert resolve_files([str(link / "real.yaml")]) == []
+        assert capsys.readouterr().out == ""
 
     def test_symlink_loop_does_not_hang(self, tmp_path):
-        """A symlink pointing back to its own parent dir must not cause infinite recursion."""
-        (tmp_path / "valid.yaml").write_text("ok: true\n")
-        loop_link = tmp_path / "loop"
-        loop_link.symlink_to(tmp_path)  # points to parent → circular
-        try:
-            result = resolve_files([str(tmp_path)])
-            assert isinstance(result, list)
-            # The real file should still be found
-            assert any("valid.yaml" in f for f in result)
-        except RecursionError:
-            pytest.fail("resolve_files() hit a RecursionError on a symlink loop")
+        """Directory scans and recursive globs both terminate on circular links."""
+        real = tmp_path / "valid.yaml"
+        real.write_text("ok: true\n")
+        nested = tmp_path / "nested"
+        nested.mkdir()
+        other = nested / "other.yaml"
+        other.write_text("ok: true\n")
+        (nested / "loop").symlink_to(tmp_path, target_is_directory=True)
+
+        expected = {str(real), str(other)}
+        assert set(resolve_files([str(tmp_path)])) == expected
+        assert set(resolve_files([str(tmp_path / "**" / "*.yaml")])) == expected
+
+    def test_relative_recursive_glob_skips_symlink_loop(self, tmp_path, monkeypatch):
+        """The CLI's relative glob example also terminates on a circular link."""
+        real = tmp_path / "valid.yaml"
+        real.write_text("ok: true\n")
+        (tmp_path / "loop").symlink_to(tmp_path, target_is_directory=True)
+        monkeypatch.chdir(tmp_path)
+
+        assert resolve_files(["**/*.yaml"]) == [str(real)]
 
     def test_empty_directory_returns_empty_list(self, tmp_path):
         """Scanning a directory with no YAML files returns an empty list."""
