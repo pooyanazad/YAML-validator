@@ -103,6 +103,7 @@ def _contains_symlink(path: Path) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 def _expand_paths(path_arg: str) -> tuple[list[Path], bool]:
     """Expand a path or glob without descending through symbolic links."""
+    directory_only = path_arg.endswith(os.sep) or bool(os.altsep and path_arg.endswith(os.altsep))
     path = Path(path_arg)
     skipped_symlink = False
     if path.is_absolute():
@@ -136,11 +137,15 @@ def _expand_paths(path_arg: str) -> tuple[list[Path], bool]:
                         expanded.append(candidate)
         matches = expanded
 
+    # Path strips trailing separators, but glob patterns ending in one match
+    # directories only (e.g. "configs/*/").
+    matches = [match for match in matches if not directory_only or match.is_dir()]
+
     # Keep the old literal-path fallback for names such as "odd[1]" while
     # rejecting links in every component, not just at the final file.
     if not matches and _contains_symlink(path):
         skipped_symlink = True
-    elif not matches and path.exists():
+    elif not matches and path.exists() and (not directory_only or path.is_dir()):
         matches = [path]
 
     return matches, skipped_symlink

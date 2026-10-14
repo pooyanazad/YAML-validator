@@ -1542,6 +1542,21 @@ class TestResolveFilesNegative:
         assert resolve_files([str(scan / "*.yaml")]) == []
         assert capsys.readouterr().out == ""
 
+    def test_trailing_slash_glob_matches_only_directories(self, tmp_path):
+        """A directory-only glob must not pass regular files to validation."""
+        configs = tmp_path / "configs"
+        configs.mkdir()
+        valid_dir = configs / "valid"
+        valid_dir.mkdir()
+        valid = valid_dir / "config.yaml"
+        valid.write_text("ok: true\n")
+        notes = configs / "notes.txt"
+        notes.write_text("not YAML: [\n")
+        (configs / "linked").symlink_to(valid_dir, target_is_directory=True)
+
+        assert resolve_files([str(configs / "*") + os.sep]) == [str(valid)]
+        assert resolve_files([str(notes) + os.sep]) == []
+
     def test_recursive_glob_skips_symlinked_directory(self, tmp_path):
         """A recursive glob must not enter a linked directory outside its root."""
         scan = tmp_path / "scan"
